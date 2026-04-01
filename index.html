@@ -70,6 +70,34 @@
             <span class="scene-ring scene-ring--wide"></span>
             <span class="scene-ring scene-ring--gate"></span>
             <span class="scene-wipe"></span>
+            <span class="receiving-field receiving-field--ground"></span>
+            <span class="receiving-field receiving-field--frame"></span>
+            <span class="receiving-field receiving-field--block"></span>
+            <span class="receiving-field receiving-field--fragment"></span>
+            <span class="transform-event transform-event--sphere" data-event="sphere">
+              <span class="transform-event__wake"></span>
+              <span class="transform-event__flare"></span>
+              <span class="transform-event__ring"></span>
+            </span>
+            <span class="transform-event transform-event--capsule" data-event="capsule">
+              <span class="transform-event__wake"></span>
+              <span class="transform-event__flare"></span>
+              <span class="transform-event__ring"></span>
+            </span>
+            <span class="transform-event transform-event--monolith" data-event="monolith">
+              <span class="transform-event__wake"></span>
+              <span class="transform-event__flare"></span>
+              <span class="transform-event__ring"></span>
+            </span>
+            <span class="transform-event transform-event--cuboid" data-event="cuboid">
+              <span class="transform-event__wake"></span>
+              <span class="transform-event__flare"></span>
+              <span class="transform-event__ring"></span>
+            </span>
+            <span class="transit-ghost transit-ghost--sphere" data-ghost="sphere"></span>
+            <span class="transit-ghost transit-ghost--capsule" data-ghost="capsule"></span>
+            <span class="transit-ghost transit-ghost--monolith" data-ghost="monolith"></span>
+            <span class="transit-ghost transit-ghost--cuboid" data-ghost="cuboid"></span>
             <span class="cast-object cast-object--sphere" data-cast="sphere">
               <span class="cast-object__glow"></span>
               <span class="cast-object__glint"></span>
@@ -86,6 +114,18 @@
               <span class="cast-object__glow"></span>
               <span class="cast-object__glint"></span>
             </span>
+            <span class="rust-object rust-object--furnace" data-rust="furnace">
+              <span class="rust-object__detail"></span>
+            </span>
+            <span class="rust-object rust-object--purifier" data-rust="purifier">
+              <span class="rust-object__detail"></span>
+            </span>
+            <span class="rust-object rust-object--vending" data-rust="vending">
+              <span class="rust-object__detail"></span>
+            </span>
+            <span class="rust-object rust-object--box" data-rust="box">
+              <span class="rust-object__detail"></span>
+            </span>
           </div>
         </div>
       </main>
@@ -100,9 +140,49 @@
         <span class="rail-divider" aria-hidden="true"></span>
 
         <div class="rail-action">
-          <a class="cta" href="mailto:hello@realrust.studio?subject=Start%20a%20conversation">
-            Start a conversation
-          </a>
+          <div class="contact-shell" data-contact-shell data-open="false" data-status="idle">
+            <div
+              class="contact-panel"
+              id="contact-panel"
+              data-contact-panel
+              role="group"
+              aria-label="Contact options"
+              aria-hidden="true"
+            >
+              <a
+                class="contact-email"
+                href="mailto:hello@realrust.studio?subject=Start%20a%20conversation"
+              >
+                hello@realrust.studio
+              </a>
+
+              <div class="contact-options">
+                <button class="contact-option" type="button" data-copy-email>
+                  Copy email
+                </button>
+
+                <a
+                  class="contact-option"
+                  href="mailto:hello@realrust.studio?subject=Start%20a%20conversation"
+                >
+                  Open mail
+                </a>
+              </div>
+
+              <p class="contact-feedback" data-contact-feedback aria-live="polite" role="status"></p>
+            </div>
+
+            <button
+              class="cta"
+              type="button"
+              data-contact-toggle
+              aria-expanded="false"
+              aria-controls="contact-panel"
+            >
+              <span class="cta__label">Start a conversation</span>
+              <span class="cta__icon" aria-hidden="true"></span>
+            </button>
+          </div>
         </div>
       </footer>
     </div>
