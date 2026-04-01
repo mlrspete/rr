@@ -1,0 +1,67 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>REAL RUST</title>
+    <meta
+      name="description"
+      content="REAL RUST is a Rust-native campaign studio building cinematic launches, world-first visuals, and in-game credibility."
+    >
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link
+      href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@400;500;600&family=Space+Grotesk:wght@400;500;700&display=swap"
+      rel="stylesheet"
+    >
+    <link rel="stylesheet" href="./styles.css">
+  </head>
+  <body>
+    <div class="page-shell">
+      <header class="top-rail">
+        <nav class="nav-cluster" aria-label="Primary">
+          <span>Campaigns</span>
+          <span>Worlds</span>
+          <a href="mailto:hello@realrust.studio?subject=REAL%20RUST%20Inquiry">Contact</a>
+        </nav>
+        <a class="brand-mark" href="./" aria-label="REAL RUST home">REAL RUST</a>
+        <p class="top-note">Rust-native campaign studio</p>
+      </header>
+
+      <main class="hero" aria-labelledby="hero-title">
+        <div class="hero-copy">
+          <h1 id="hero-title">
+            Pure form goes in.
+            <span>Rust-world gravity</span> comes out.
+          </h1>
+        </div>
+
+        <div class="scene-frame" data-scene-host>
+          <canvas id="hero-canvas" aria-hidden="true"></canvas>
+
+          <div class="scene-fallback" aria-hidden="true">
+            <span class="scene-fallback__flare scene-fallback__flare--ember"></span>
+            <span class="scene-fallback__flare scene-fallback__flare--oxide"></span>
+            <span class="scene-fallback__glass scene-fallback__glass--left"></span>
+            <span class="scene-fallback__glass scene-fallback__glass--right"></span>
+            <span class="scene-fallback__ring scene-fallback__ring--one"></span>
+            <span class="scene-fallback__ring scene-fallback__ring--two"></span>
+            <span class="scene-fallback__seed scene-fallback__seed--one"></span>
+            <span class="scene-fallback__seed scene-fallback__seed--two"></span>
+          </div>
+        </div>
+      </main>
+
+      <footer class="bottom-rail">
+        <p class="support-line">
+          Rust-native campaigns, launch visuals, and cinematic worldbuilding for brands that need real in-game credibility.
+        </p>
+        <a class="cta" href="mailto:hello@realrust.studio?subject=Brief%20the%20studio">
+          Brief the studio
+        </a>
+      </footer>
+    </div>
+
+    <script type="module" src="./app.js"></script>
+  </body>
+</html>
