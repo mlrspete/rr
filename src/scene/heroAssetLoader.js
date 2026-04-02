@@ -17,12 +17,12 @@ export async function loadHeroAssetInstance(key, { createMaterial } = {}) {
       return;
     }
 
-    child.geometry = child.geometry.clone();
-    child.geometry.computeBoundingBox();
-    child.geometry.computeBoundingSphere();
-
     if (material) {
       child.material = material;
+    } else if (Array.isArray(child.material)) {
+      child.material = child.material.map((entry) => entry?.clone());
+    } else if (child.material) {
+      child.material = child.material.clone();
     }
 
     child.castShadow = false;
@@ -54,8 +54,6 @@ export function disposeHeroAssetInstance(instance) {
       return;
     }
 
-    child.geometry?.dispose();
-
     if (Array.isArray(child.material)) {
       for (const material of child.material) {
         if (material) {
@@ -75,22 +73,37 @@ export function disposeHeroAssetInstance(instance) {
 }
 
 export function clearHeroAssetCache() {
+  const uniqueGeometries = new Set();
+  const uniqueMaterials = new Set();
+
   for (const template of assetTemplateCache.values()) {
     template.root.traverse((child) => {
       if (!child.isMesh) {
         return;
       }
 
-      child.geometry?.dispose();
+      if (child.geometry) {
+        uniqueGeometries.add(child.geometry);
+      }
 
       if (Array.isArray(child.material)) {
         for (const material of child.material) {
-          material?.dispose();
+          if (material) {
+            uniqueMaterials.add(material);
+          }
         }
-      } else {
-        child.material?.dispose();
+      } else if (child.material) {
+        uniqueMaterials.add(child.material);
       }
     });
+  }
+
+  for (const geometry of uniqueGeometries) {
+    geometry.dispose();
+  }
+
+  for (const material of uniqueMaterials) {
+    material.dispose();
   }
 
   assetTemplateCache.clear();
@@ -105,8 +118,18 @@ async function getOrLoadAssetTemplate(spec) {
 }
 
 async function buildAssetTemplate(spec) {
-  const sourceUrl = new URL(spec.source, import.meta.url).href;
-  const object = await objLoader.loadAsync(sourceUrl);
+  const sourceUrl = resolveHeroAssetRuntimeUrl(spec);
+
+  let object;
+
+  try {
+    object = await objLoader.loadAsync(sourceUrl);
+  } catch (error) {
+    throw new Error(`Failed to load hero asset "${spec.key}" from ${sourceUrl}`, {
+      cause: error,
+    });
+  }
+
   const root = new THREE.Group();
   const normalized = new THREE.Group();
 
@@ -141,7 +164,12 @@ async function buildAssetTemplate(spec) {
 
   const centeredBounds = new THREE.Box3().setFromObject(root);
   const centeredSize = centeredBounds.getSize(new THREE.Vector3());
-  const referenceExtent = Math.max(centeredSize.x, centeredSize.y, centeredSize.z);
+  const referenceExtent = Math.max(
+    centeredSize.x,
+    centeredSize.y,
+    centeredSize.z,
+    Number.EPSILON,
+  );
   const uniformScale = (spec.targetExtent ?? 2.25) / referenceExtent;
   normalized.scale.setScalar(uniformScale);
 
@@ -153,6 +181,16 @@ async function buildAssetTemplate(spec) {
     root,
     bounds: extractBounds(finalBounds),
   };
+}
+
+function resolveHeroAssetRuntimeUrl(spec) {
+  const relativePath = `${spec.runtimePath ?? spec.source ?? ""}`.replace(/^\/+/, "");
+  const baseUrl =
+    typeof document !== "undefined"
+      ? new URL(import.meta.env.BASE_URL, document.baseURI)
+      : new URL(import.meta.env.BASE_URL, "http://localhost/");
+
+  return new URL(relativePath, baseUrl).href;
 }
 
 function extractBounds(box) {

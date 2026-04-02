@@ -1,7 +1,6 @@
 import { defineConfig } from "vite";
 
 export default defineConfig({
-  assetsInclude: ["**/*.obj"],
   base: process.env.GITHUB_ACTIONS ? "/rr/" : "/",
   build: {
     chunkSizeWarningLimit: 650,

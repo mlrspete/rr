@@ -1,157 +1,145 @@
 import * as THREE from "three";
 
 export function createHeroMaterials(config) {
-  const { palette } = config;
-  const coolSheen = new THREE.Color(palette.cool).lerp(new THREE.Color(palette.lightWarm), 0.28);
+  const { palette, materials } = config;
+  const membraneAppearance = config.membrane.appearance;
+  const membraneActivation = config.membrane.activation;
+  const coolSheen = new THREE.Color(palette.cool).lerp(new THREE.Color(palette.lightWarm), 0.22);
   const warmSpecular = new THREE.Color(palette.lightWarm).lerp(new THREE.Color(palette.warm), 0.18);
-  const coolSpecular = new THREE.Color(palette.lightWarm).lerp(new THREE.Color(palette.cool), 0.16);
+  const coolSpecular = new THREE.Color(palette.lightWarm).lerp(new THREE.Color(palette.cool), 0.12);
 
   return {
-    floor: new THREE.MeshPhysicalMaterial({
-      color: palette.charcoal,
-      metalness: 0.3,
-      roughness: 0.78,
-      clearcoat: 0.26,
-      clearcoatRoughness: 0.54,
-      envMapIntensity: 0.48,
-    }),
-    floorGlow: new THREE.MeshBasicMaterial({
-      color: palette.warm,
+    membrane: new THREE.MeshPhysicalMaterial({
+      color: membraneAppearance.bodyColor,
+      emissive: membraneAppearance.emissive,
+      emissiveIntensity: membraneAppearance.emissiveIntensity,
+      metalness: membraneAppearance.metalness,
+      roughness: membraneAppearance.roughness,
+      transmission: membraneAppearance.transmission,
+      thickness: membraneAppearance.thickness,
+      ior: membraneAppearance.ior,
+      attenuationColor: membraneAppearance.attenuationColor,
+      attenuationDistance: membraneAppearance.attenuationDistance,
+      clearcoat: membraneAppearance.clearcoat,
+      clearcoatRoughness: membraneAppearance.clearcoatRoughness,
+      iridescence: membraneAppearance.iridescence,
+      iridescenceIOR: membraneAppearance.iridescenceIOR,
+      iridescenceThicknessRange: membraneAppearance.iridescenceThicknessRange,
+      specularIntensity: membraneAppearance.specularIntensity,
+      specularColor: coolSpecular,
+      sheen: 0.12,
+      sheenColor: coolSheen,
+      sheenRoughness: 0.28,
       transparent: true,
-      opacity: 0.075,
+      opacity: membraneAppearance.opacity,
+      envMapIntensity: membraneAppearance.envMapIntensity,
+      side: THREE.DoubleSide,
+    }),
+    membraneEdge: new THREE.MeshPhysicalMaterial({
+      color: membraneAppearance.rimColor,
+      emissive: membraneAppearance.rimEmissive,
+      emissiveIntensity: membraneAppearance.rimEmissiveIntensity,
+      metalness: membraneAppearance.rimMetalness,
+      roughness: membraneAppearance.rimRoughness,
+      clearcoat: membraneAppearance.rimClearcoat,
+      clearcoatRoughness: membraneAppearance.rimClearcoatRoughness,
+      specularIntensity: 1,
+      specularColor: warmSpecular,
+      sheen: 0.08,
+      sheenColor: warmSpecular,
+      sheenRoughness: 0.3,
+      transparent: true,
+      opacity: membraneAppearance.rimOpacity,
+      envMapIntensity: membraneAppearance.rimEnvMapIntensity,
+    }),
+    sweepBand: new THREE.MeshBasicMaterial({
+      color: palette.lightWarm,
+      transparent: true,
+      opacity: membraneActivation.bandBaseOpacity,
       blending: THREE.AdditiveBlending,
       depthWrite: false,
       side: THREE.DoubleSide,
       toneMapped: false,
     }),
-    ribbon: new THREE.MeshPhysicalMaterial({
-      color: "#d8d4d7",
-      emissive: palette.cool,
-      emissiveIntensity: 0.022,
-      metalness: 0.96,
-      roughness: 0.16,
-      clearcoat: 1,
-      clearcoatRoughness: 0.05,
-      sheen: 0.7,
-      sheenColor: coolSheen,
-      sheenRoughness: 0.34,
-      iridescence: 0.1,
-      iridescenceIOR: 1.18,
-      specularIntensity: 1,
-      specularColor: warmSpecular,
-      envMapIntensity: 1.82,
-    }),
-    membrane: new THREE.MeshPhysicalMaterial({
-      color: "#f5f0ea",
-      emissive: palette.cool,
-      emissiveIntensity: 0.018,
-      metalness: 0.03,
-      roughness: 0.03,
-      transmission: 0.97,
-      thickness: 2.4,
-      ior: 1.19,
-      attenuationColor: palette.plumGlass,
-      attenuationDistance: 1.9,
-      clearcoat: 1,
-      clearcoatRoughness: 0.025,
-      iridescence: 0.18,
-      iridescenceIOR: 1.18,
-      iridescenceThicknessRange: [120, 520],
-      specularIntensity: 1,
-      specularColor: coolSpecular,
+    slotDistortion: new THREE.ShaderMaterial({
+      uniforms: {
+        uColor: { value: new THREE.Color(palette.cool) },
+        uOpacity: { value: 0 },
+        uIntensity: { value: 0 },
+        uTime: { value: 0 },
+      },
+      vertexShader: `
+        uniform float uIntensity;
+        uniform float uTime;
+        varying vec3 vWorldPosition;
+        varying vec3 vWorldNormal;
+
+        void main() {
+          vec3 displaced = position;
+          float bandWave =
+            sin(position.y * 7.6 + uTime * 1.1 + position.x * 2.2) *
+            0.5 +
+            0.5;
+          float shear =
+            sin((position.x + position.z) * 5.8 - uTime * 0.9) *
+            0.5 +
+            0.5;
+          float ripple = mix(bandWave, shear, 0.35);
+
+          displaced += normal * ripple * uIntensity * 0.024;
+
+          vec4 worldPosition = modelMatrix * vec4(displaced, 1.0);
+          vWorldPosition = worldPosition.xyz;
+          vWorldNormal = normalize(mat3(modelMatrix) * normal);
+
+          gl_Position = projectionMatrix * viewMatrix * worldPosition;
+        }
+      `,
+      fragmentShader: `
+        uniform vec3 uColor;
+        uniform float uOpacity;
+        uniform float uIntensity;
+        uniform float uTime;
+        varying vec3 vWorldPosition;
+        varying vec3 vWorldNormal;
+
+        void main() {
+          vec3 viewDirection = normalize(cameraPosition - vWorldPosition);
+          float fresnel = pow(1.0 - max(dot(normalize(vWorldNormal), viewDirection), 0.0), 3.1);
+          float flow =
+            sin(vWorldPosition.y * 5.8 + uTime * 1.3 + vWorldPosition.x * 1.5) *
+            0.5 +
+            0.5;
+          float shimmer =
+            sin((vWorldPosition.x - vWorldPosition.z) * 6.4 - uTime * 1.1) *
+            0.5 +
+            0.5;
+          float band = mix(flow, shimmer, 0.32);
+
+          float alpha =
+            fresnel *
+            mix(0.42, 0.9, band) *
+            uOpacity *
+            clamp(uIntensity, 0.0, 1.0);
+
+          if (alpha <= 0.001) {
+            discard;
+          }
+
+          vec3 color = mix(uColor, vec3(1.0), fresnel * 0.2 + band * 0.06);
+          gl_FragColor = vec4(color, alpha);
+        }
+      `,
       transparent: true,
-      opacity: 0.98,
-      envMapIntensity: 1.72,
+      depthWrite: false,
+      blending: THREE.AdditiveBlending,
       side: THREE.DoubleSide,
-    }),
-    membraneEdge: new THREE.MeshPhysicalMaterial({
-      color: "#d8d0cb",
-      metalness: 0.82,
-      roughness: 0.14,
-      clearcoat: 1,
-      clearcoatRoughness: 0.05,
-      specularIntensity: 1,
-      specularColor: warmSpecular,
-      transparent: true,
-      opacity: 0.38,
-      envMapIntensity: 1.82,
-    }),
-    paneOutline: new THREE.MeshPhysicalMaterial({
-      color: "#c9c2c5",
-      metalness: 0.84,
-      roughness: 0.24,
-      clearcoat: 1,
-      clearcoatRoughness: 0.1,
-      transparent: true,
-      opacity: 0.2,
-      envMapIntensity: 1.1,
-    }),
-    courier: new THREE.MeshPhysicalMaterial({
-      color: "#faf4ee",
-      emissive: palette.cool,
-      emissiveIntensity: 0.03,
-      metalness: 0.04,
-      roughness: 0.018,
-      transmission: 0.99,
-      thickness: 3.2,
-      ior: 1.2,
-      attenuationColor: palette.plumGlass,
-      attenuationDistance: 1.55,
-      clearcoat: 1,
-      clearcoatRoughness: 0.018,
-      iridescence: 0.22,
-      iridescenceIOR: 1.16,
-      iridescenceThicknessRange: [160, 700],
-      specularIntensity: 1,
-      specularColor: coolSpecular,
-      transparent: true,
-      opacity: 1,
-      envMapIntensity: 2.08,
-    }),
-    sphereChrome: new THREE.MeshPhysicalMaterial({
-      color: "#d4d0d3",
-      metalness: 0.98,
-      roughness: 0.12,
-      clearcoat: 1,
-      clearcoatRoughness: 0.06,
-      iridescence: 0.08,
-      iridescenceIOR: 1.16,
-      envMapIntensity: 1.5,
-    }),
-    sphereGlass: new THREE.MeshPhysicalMaterial({
-      color: "#f5ede5",
-      metalness: 0.02,
-      roughness: 0.04,
-      transmission: 0.98,
-      thickness: 1.7,
-      ior: 1.14,
-      attenuationColor: palette.plumGlass,
-      attenuationDistance: 2.6,
-      clearcoat: 1,
-      clearcoatRoughness: 0.04,
-      iridescence: 0.1,
-      iridescenceIOR: 1.12,
-      transparent: true,
-      opacity: 0.98,
-      envMapIntensity: 1.4,
-    }),
-    spherePearl: new THREE.MeshPhysicalMaterial({
-      color: "#d8d4d1",
-      emissive: palette.ember,
-      emissiveIntensity: 0.02,
-      metalness: 0.34,
-      roughness: 0.22,
-      clearcoat: 1,
-      clearcoatRoughness: 0.08,
-      sheen: 0.4,
-      sheenColor: new THREE.Color(palette.lightWarm),
-      sheenRoughness: 0.46,
-      envMapIntensity: 1.12,
+      toneMapped: false,
     }),
     backdrop: new THREE.MeshBasicMaterial({
       color: palette.plum,
       transparent: true,
-      opacity: 0.14,
+      opacity: materials.backdropOpacity,
       blending: THREE.AdditiveBlending,
       depthWrite: false,
       side: THREE.DoubleSide,
@@ -159,9 +147,9 @@ export function createHeroMaterials(config) {
     }),
     dust: new THREE.PointsMaterial({
       color: palette.lightWarm,
-      size: 0.02,
+      size: materials.dustSize,
       transparent: true,
-      opacity: 0.28,
+      opacity: materials.dustOpacity,
       sizeAttenuation: true,
       depthWrite: false,
       blending: THREE.AdditiveBlending,
@@ -173,24 +161,33 @@ export function createHeroMaterials(config) {
 export function createHeroAssetMaterial(config, spec) {
   const tone = spec.materialTone ?? {};
   const { palette } = config;
+  const isPremiumShape = spec.kind === "premium-shape";
+  const defaultSpecularColor = new THREE.Color(
+    tone.specularColor ?? (isPremiumShape ? "#efe6dc" : palette.lightWarm),
+  );
+  const defaultSheenColor = new THREE.Color(
+    tone.sheenColor ?? (isPremiumShape ? "#f0e8de" : palette.lightWarm),
+  );
 
   return new THREE.MeshPhysicalMaterial({
     color: tone.color ?? palette.metal,
     emissive: tone.emissive ?? palette.ember,
-    emissiveIntensity: tone.emissiveIntensity ?? 0.04,
-    metalness: tone.metalness ?? 0.58,
-    roughness: tone.roughness ?? 0.24,
+    emissiveIntensity: tone.emissiveIntensity ?? 0.025,
+    metalness: tone.metalness ?? (isPremiumShape ? 0.42 : 0.62),
+    roughness: tone.roughness ?? (isPremiumShape ? 0.2 : 0.26),
     clearcoat: tone.clearcoat ?? 0.92,
-    clearcoatRoughness: tone.clearcoatRoughness ?? 0.1,
-    sheen: tone.sheen ?? 0.42,
-    sheenColor: tone.sheenColor ?? palette.lightWarm,
-    sheenRoughness: tone.sheenRoughness ?? 0.46,
-    iridescence: tone.iridescence ?? 0.08,
-    iridescenceIOR: 1.25,
-    specularIntensity: 0.92,
-    specularColor: new THREE.Color(palette.lightWarm),
+    clearcoatRoughness: tone.clearcoatRoughness ?? 0.08,
+    sheen: tone.sheen ?? (isPremiumShape ? 0.46 : 0.22),
+    sheenColor: defaultSheenColor,
+    sheenRoughness: tone.sheenRoughness ?? (isPremiumShape ? 0.28 : 0.42),
+    iridescence: tone.iridescence ?? (isPremiumShape ? 0.03 : 0.02),
+    iridescenceIOR: tone.iridescenceIOR ?? 1.18,
+    specularIntensity: tone.specularIntensity ?? 0.92,
+    specularColor: defaultSpecularColor,
+    ior: tone.ior ?? (isPremiumShape ? 1.42 : 1.36),
     transparent: true,
     opacity: 1,
-    envMapIntensity: 1.34,
+    envMapIntensity: tone.envMapIntensity ?? (isPremiumShape ? 1.4 : 1.24),
+    flatShading: tone.flatShading ?? false,
   });
 }
