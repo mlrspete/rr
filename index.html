@@ -15,178 +15,95 @@
       href="https://fonts.googleapis.com/css2?family=Bodoni+Moda:opsz,wght@6..96,400;6..96,500;6..96,600&family=IBM+Plex+Mono:wght@400;500;600&family=Sora:wght@400;500;600;700&display=swap"
       rel="stylesheet"
     >
-    <link rel="stylesheet" href="./styles.css">
   </head>
   <body>
     <div class="site-shell">
-      <header class="top-rail" aria-label="Site frame">
-        <nav class="top-links" aria-label="Primary">
-          <span>Campaigns</span>
-          <span>Method</span>
-          <a href="mailto:hello@realrust.studio?subject=Start%20a%20conversation">Contact</a>
-        </nav>
+      <div class="hero-canvas" data-hero-canvas aria-hidden="true"></div>
 
-        <a class="wordmark" href="./" aria-label="REAL RUST home">REAL RUST</a>
+      <div class="site-overlay">
+        <header class="top-rail" aria-label="Site frame">
+          <nav class="top-links" aria-label="Primary">
+            <span data-intro="nav">Campaigns</span>
+            <span data-intro="nav">Method</span>
+            <a data-intro="nav" href="mailto:hello@realrust.studio?subject=Start%20a%20conversation">
+              Contact
+            </a>
+          </nav>
 
-        <p class="utility-label">Rust-native campaign studio</p>
-      </header>
+          <a class="wordmark" data-intro="wordmark" href="./" aria-label="REAL RUST home">
+            REAL RUST
+          </a>
 
-      <main class="hero-stage" data-hero-stage aria-labelledby="hero-title">
-        <div class="headline-wrap">
-          <h1 class="hero-title" id="hero-title">
-            <span>We make brands</span>
-            <span>belong in Rust.</span>
-          </h1>
-        </div>
+          <p class="utility-label" data-intro="utility">Rust-native campaign studio</p>
+        </header>
 
-        <div class="scene-stage" aria-hidden="true">
-          <div class="scene-composition">
-            <span class="scene-floor"></span>
-            <span class="scene-glow scene-glow--north"></span>
-            <span class="scene-glow scene-glow--south"></span>
-            <span class="scene-fog scene-fog--left"></span>
-            <span class="scene-fog scene-fog--right"></span>
-            <span class="scene-trace scene-trace--warm"></span>
-            <span class="scene-trace scene-trace--cool"></span>
-            <span class="scene-optic scene-optic--entry">
-              <span class="scene-optic__core"></span>
-              <span class="scene-optic__distortion"></span>
-              <span class="scene-optic__edge"></span>
-              <span class="scene-optic__flare"></span>
-            </span>
-            <span class="scene-optic scene-optic--membrane">
-              <span class="scene-optic__core"></span>
-              <span class="scene-optic__distortion"></span>
-              <span class="scene-optic__edge"></span>
-              <span class="scene-optic__flare"></span>
-              <span class="scene-optic__glint"></span>
-            </span>
-            <span class="scene-optic scene-optic--exit">
-              <span class="scene-optic__core"></span>
-              <span class="scene-optic__distortion"></span>
-              <span class="scene-optic__edge"></span>
-              <span class="scene-optic__flare"></span>
-            </span>
-            <span class="scene-ring scene-ring--wide"></span>
-            <span class="scene-ring scene-ring--gate"></span>
-            <span class="scene-wipe"></span>
-            <span class="receiving-field receiving-field--ground"></span>
-            <span class="receiving-field receiving-field--frame"></span>
-            <span class="receiving-field receiving-field--block"></span>
-            <span class="receiving-field receiving-field--fragment"></span>
-            <span class="transform-event transform-event--sphere" data-event="sphere">
-              <span class="transform-event__wake"></span>
-              <span class="transform-event__flare"></span>
-              <span class="transform-event__ring"></span>
-            </span>
-            <span class="transform-event transform-event--capsule" data-event="capsule">
-              <span class="transform-event__wake"></span>
-              <span class="transform-event__flare"></span>
-              <span class="transform-event__ring"></span>
-            </span>
-            <span class="transform-event transform-event--monolith" data-event="monolith">
-              <span class="transform-event__wake"></span>
-              <span class="transform-event__flare"></span>
-              <span class="transform-event__ring"></span>
-            </span>
-            <span class="transform-event transform-event--cuboid" data-event="cuboid">
-              <span class="transform-event__wake"></span>
-              <span class="transform-event__flare"></span>
-              <span class="transform-event__ring"></span>
-            </span>
-            <span class="transit-ghost transit-ghost--sphere" data-ghost="sphere"></span>
-            <span class="transit-ghost transit-ghost--capsule" data-ghost="capsule"></span>
-            <span class="transit-ghost transit-ghost--monolith" data-ghost="monolith"></span>
-            <span class="transit-ghost transit-ghost--cuboid" data-ghost="cuboid"></span>
-            <span class="cast-object cast-object--sphere" data-cast="sphere">
-              <span class="cast-object__glow"></span>
-              <span class="cast-object__glint"></span>
-            </span>
-            <span class="cast-object cast-object--capsule" data-cast="capsule">
-              <span class="cast-object__glow"></span>
-              <span class="cast-object__glint"></span>
-            </span>
-            <span class="cast-object cast-object--monolith" data-cast="monolith">
-              <span class="cast-object__glow"></span>
-              <span class="cast-object__glint"></span>
-            </span>
-            <span class="cast-object cast-object--cuboid" data-cast="cuboid">
-              <span class="cast-object__glow"></span>
-              <span class="cast-object__glint"></span>
-            </span>
-            <span class="rust-object rust-object--furnace" data-rust="furnace">
-              <span class="rust-object__detail"></span>
-            </span>
-            <span class="rust-object rust-object--purifier" data-rust="purifier">
-              <span class="rust-object__detail"></span>
-            </span>
-            <span class="rust-object rust-object--vending" data-rust="vending">
-              <span class="rust-object__detail"></span>
-            </span>
-            <span class="rust-object rust-object--box" data-rust="box">
-              <span class="rust-object__detail"></span>
-            </span>
+        <main class="hero-stage" data-hero-stage aria-labelledby="hero-title">
+          <div class="headline-wrap">
+            <h1 class="hero-title" id="hero-title">
+              <span data-intro="headline">We make brands</span>
+              <span data-intro="headline">belong in Rust.</span>
+            </h1>
           </div>
-        </div>
-      </main>
+        </main>
 
-      <footer class="interaction-rail">
-        <div class="rail-copy">
-          <p class="support-line">
-            Premium Rust-native campaigns for endemic brands &mdash; designed to land inside the wipe, not on top of it.
-          </p>
-        </div>
+        <footer class="interaction-rail" data-intro="rail">
+          <div class="rail-copy" data-intro="support">
+            <p class="support-line">
+              Premium Rust-native campaigns for endemic brands &mdash; designed to land inside the wipe, not on top of it.
+            </p>
+          </div>
 
-        <span class="rail-divider" aria-hidden="true"></span>
+          <span class="rail-divider" aria-hidden="true"></span>
 
-        <div class="rail-action">
-          <div class="contact-shell" data-contact-shell data-open="false" data-status="idle">
-            <div
-              class="contact-panel"
-              id="contact-panel"
-              data-contact-panel
-              role="group"
-              aria-label="Contact options"
-              aria-hidden="true"
-            >
-              <a
-                class="contact-email"
-                href="mailto:hello@realrust.studio?subject=Start%20a%20conversation"
+          <div class="rail-action" data-intro="action">
+            <div class="contact-shell" data-contact-shell data-open="false" data-status="idle">
+              <div
+                class="contact-panel"
+                id="contact-panel"
+                data-contact-panel
+                role="group"
+                aria-label="Contact options"
+                aria-hidden="true"
               >
-                hello@realrust.studio
-              </a>
-
-              <div class="contact-options">
-                <button class="contact-option" type="button" data-copy-email>
-                  Copy email
-                </button>
-
                 <a
-                  class="contact-option"
+                  class="contact-email"
                   href="mailto:hello@realrust.studio?subject=Start%20a%20conversation"
                 >
-                  Open mail
+                  hello@realrust.studio
                 </a>
+
+                <div class="contact-options">
+                  <button class="contact-option" type="button" data-copy-email>
+                    Copy email
+                  </button>
+
+                  <a
+                    class="contact-option"
+                    href="mailto:hello@realrust.studio?subject=Start%20a%20conversation"
+                  >
+                    Open mail
+                  </a>
+                </div>
+
+                <p class="contact-feedback" data-contact-feedback aria-live="polite" role="status"></p>
               </div>
 
-              <p class="contact-feedback" data-contact-feedback aria-live="polite" role="status"></p>
+              <button
+                class="cta"
+                type="button"
+                data-contact-toggle
+                aria-expanded="false"
+                aria-controls="contact-panel"
+              >
+                <span class="cta__label">Start a conversation</span>
+                <span class="cta__icon" aria-hidden="true"></span>
+              </button>
             </div>
-
-            <button
-              class="cta"
-              type="button"
-              data-contact-toggle
-              aria-expanded="false"
-              aria-controls="contact-panel"
-            >
-              <span class="cta__label">Start a conversation</span>
-              <span class="cta__icon" aria-hidden="true"></span>
-            </button>
           </div>
-        </div>
-      </footer>
+        </footer>
+      </div>
     </div>
 
-    <script type="module" src="./app.js"></script>
+    <script type="module" src="/src/main.js"></script>
   </body>
 </html>
