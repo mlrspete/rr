@@ -26,7 +26,7 @@ const disposeContact = initializeContactShell();
 
 runIntroSequence();
 registerHeroControls();
-scheduleAssetPreload();
+schedulePostReadyAssetPreload();
 
 window.addEventListener("pagehide", destroyApp, { once: true });
 
@@ -80,12 +80,27 @@ function registerHeroControls() {
   };
 }
 
+function schedulePostReadyAssetPreload() {
+  if (!heroScene) {
+    return;
+  }
+
+  heroScene.whenReady().then((readyKey) => {
+    if (!readyKey || hasDestroyed) {
+      return;
+    }
+
+    scheduleAssetPreload();
+  });
+}
+
 function scheduleAssetPreload() {
   if (!heroScene) {
     return;
   }
 
-  const remainingAssetKeys = curatedHeroAssetKeys.filter((key) => key !== selectedHeroAssetKey);
+  const activeAssetKey = heroScene.getAssetKey();
+  const remainingAssetKeys = curatedHeroAssetKeys.filter((key) => key !== activeAssetKey);
 
   if (!remainingAssetKeys.length) {
     return;
@@ -112,7 +127,6 @@ function runIntroSequence() {
     return;
   }
 
-  const navItems = gsap.utils.toArray("[data-intro='nav']");
   const headlineLines = gsap.utils.toArray("[data-intro='headline']");
   const wordmark = document.querySelector("[data-intro='wordmark']");
   const utility = document.querySelector("[data-intro='utility']");
@@ -127,26 +141,17 @@ function runIntroSequence() {
         ease: "power3.out",
       },
     })
-    .from(navItems, {
+    .from(wordmark, {
       autoAlpha: 0,
-      y: -18,
-      stagger: 0.06,
+      y: -20,
     })
-    .from(
-      wordmark,
-      {
-        autoAlpha: 0,
-        y: -20,
-      },
-      0.08,
-    )
     .from(
       utility,
       {
         autoAlpha: 0,
         y: -12,
       },
-      0.16,
+      0.08,
     )
     .from(
       headlineLines,
@@ -156,7 +161,7 @@ function runIntroSequence() {
         stagger: 0.12,
         duration: 1.2,
       },
-      0.26,
+      0.18,
     )
     .from(
       rail,
@@ -166,7 +171,7 @@ function runIntroSequence() {
         scale: 0.985,
         duration: 1.05,
       },
-      0.54,
+      0.46,
     )
     .from(
       [support, action],
@@ -176,7 +181,7 @@ function runIntroSequence() {
         stagger: 0.08,
         duration: 0.8,
       },
-      0.7,
+      0.62,
     );
 }
 
@@ -186,15 +191,14 @@ function initializeContactShell() {
   const contactToggle = document.querySelector("[data-contact-toggle]");
   const copyEmailButton = document.querySelector("[data-copy-email]");
   const contactFeedback = document.querySelector("[data-contact-feedback]");
-  const contactMailLinks = [...document.querySelectorAll("[data-contact-panel] a[href^='mailto:']")];
 
   if (!contactShell || !contactPanel || !contactToggle || !copyEmailButton || !contactFeedback) {
     return () => {};
   }
 
   const emailAddress = "hello@realrust.studio";
+  const defaultCopyLabel = copyEmailButton.textContent.trim() || "Copy email";
   let feedbackTimeout = 0;
-  let closeTimeout = 0;
 
   const clearFeedbackTimeout = () => {
     if (!feedbackTimeout) {
@@ -205,18 +209,21 @@ function initializeContactShell() {
     feedbackTimeout = 0;
   };
 
-  const clearCloseTimeout = () => {
-    if (!closeTimeout) {
-      return;
-    }
-
-    window.clearTimeout(closeTimeout);
-    closeTimeout = 0;
-  };
-
   const setContactStatus = (status, message = "") => {
     contactShell.dataset.status = status;
     contactFeedback.textContent = message;
+
+    if (status === "copied") {
+      copyEmailButton.textContent = "Copied";
+      return;
+    }
+
+    if (status === "error") {
+      copyEmailButton.textContent = "Copy unavailable";
+      return;
+    }
+
+    copyEmailButton.textContent = defaultCopyLabel;
   };
 
   const setContactOpen = (isOpen) => {
@@ -225,7 +232,8 @@ function initializeContactShell() {
     contactPanel.setAttribute("aria-hidden", String(!isOpen));
 
     if (!isOpen) {
-      clearCloseTimeout();
+      clearFeedbackTimeout();
+      setContactStatus("idle");
     }
   };
 
@@ -268,24 +276,19 @@ function initializeContactShell() {
       return;
     }
 
-    clearCloseTimeout();
     setContactStatus("idle");
     setContactOpen(true);
   };
 
   const handleCopyClick = async () => {
     setContactOpen(true);
-    clearCloseTimeout();
 
     try {
       await copyEmailToClipboard();
       setContactStatus("copied", "Email copied to clipboard.");
       scheduleFeedbackReset(1800);
-      closeTimeout = window.setTimeout(() => {
-        setContactOpen(false);
-      }, 1650);
     } catch {
-      setContactStatus("error", "Copy unavailable. Open mail instead.");
+      setContactStatus("error", "Copy unavailable. Use the address shown.");
       scheduleFeedbackReset(2200);
     }
   };
@@ -307,19 +310,10 @@ function initializeContactShell() {
     }
   };
 
-  const handleMailLinkClick = () => {
-    setContactStatus("idle");
-    setContactOpen(false);
-  };
-
   contactToggle.addEventListener("click", handleToggleClick);
   copyEmailButton.addEventListener("click", handleCopyClick);
   document.addEventListener("pointerdown", handleDocumentPointerDown);
   document.addEventListener("keydown", handleDocumentKeydown);
-
-  for (const link of contactMailLinks) {
-    link.addEventListener("click", handleMailLinkClick);
-  }
 
   const contactMode = new URL(window.location.href).searchParams.get("contact");
 
@@ -329,14 +323,9 @@ function initializeContactShell() {
 
   return () => {
     clearFeedbackTimeout();
-    clearCloseTimeout();
     contactToggle.removeEventListener("click", handleToggleClick);
     copyEmailButton.removeEventListener("click", handleCopyClick);
     document.removeEventListener("pointerdown", handleDocumentPointerDown);
     document.removeEventListener("keydown", handleDocumentKeydown);
-
-    for (const link of contactMailLinks) {
-      link.removeEventListener("click", handleMailLinkClick);
-    }
   };
 }

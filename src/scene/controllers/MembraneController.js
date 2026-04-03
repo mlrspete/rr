@@ -127,67 +127,99 @@ export class MembraneController {
     activation = 0,
     phase = 0,
   }) {
+    const motion = this.config.motion;
+    const appearance = this.config.appearance;
+    const activationConfig = this.config.activation;
     const activationStrength = THREE.MathUtils.clamp(activation, 0, 1.2);
     const phaseClamped = THREE.MathUtils.clamp(phase, 0, 1);
     const lateralBandOffset = THREE.MathUtils.lerp(
-      -this.config.motion.bandTravelX,
-      this.config.motion.bandTravelX,
+      -motion.bandTravelX,
+      motion.bandTravelX,
       phaseClamped,
     );
+    const introMotion = introProgress * motionScale;
+    const idleVerticalDrift =
+      Math.sin(elapsed * motion.verticalDriftSpeed + 0.3) * motion.verticalDrift +
+      Math.cos(elapsed * motion.secondaryVerticalDriftSpeed + 1.1) *
+        motion.secondaryVerticalDrift;
+    const idleLateralDrift =
+      Math.sin(elapsed * motion.lateralDriftSpeed + 0.42) * motion.lateralDriftX;
+    const idleDepthDrift =
+      Math.cos(elapsed * motion.depthDriftSpeed + 0.88) * motion.depthDriftZ;
+    const idlePitch =
+      Math.sin(elapsed * motion.idlePitchSpeed + 0.18) * motion.idlePitch * introMotion;
+    const idleYaw =
+      Math.cos(elapsed * motion.idleYawSpeed + 0.84) * motion.idleYaw * introMotion;
+    const idleRoll =
+      Math.sin(elapsed * motion.idleRollSpeed + motion.idleRollPhase) *
+      motion.idleRoll *
+      introMotion;
+    const idleBreath =
+      Math.sin(elapsed * motion.idleScaleSpeed + 0.46) *
+      motion.idleScaleBreath *
+      introProgress;
+    const idleGlow = Math.sin(elapsed * motion.haloPulseSpeed + 0.9) * 0.5 + 0.5;
+    const idleFrost =
+      (Math.sin(elapsed * 0.17 + 0.66) + Math.cos(elapsed * 0.11 + 1.18)) * 0.25 + 0.5;
+    const idleBodyBreath = idleBreath * 0.35;
 
     this.group.position.set(
-      this.basePosition.x,
+      this.basePosition.x + idleLateralDrift * introMotion,
       this.basePosition.y +
-        Math.sin(elapsed * 0.24 + 0.3) *
-          this.config.motion.verticalDrift *
-          introProgress *
-          motionScale,
-      this.basePosition.z,
+        idleVerticalDrift * introMotion,
+      this.basePosition.z + idleDepthDrift * introMotion,
     );
     this.group.rotation.set(
-      this.baseRotation.x -
-        pointer.y * this.config.motion.pointerPitch * interactionStrength * motionScale,
+      this.baseRotation.x +
+        idlePitch -
+        pointer.y * motion.pointerPitch * interactionStrength * motionScale,
       this.baseRotation.y -
-        pointer.x * this.config.motion.pointerYaw * interactionStrength * motionScale +
-        (phaseClamped - 0.5) * this.config.motion.phaseYaw * activationStrength,
-      this.baseRotation.z + Math.sin(elapsed * 0.18 + 0.5) * 0.008 * introProgress * motionScale,
+        pointer.x * motion.pointerYaw * interactionStrength * motionScale +
+        idleYaw +
+        (phaseClamped - 0.5) * motion.phaseYaw * activationStrength,
+      this.baseRotation.z + idleRoll,
     );
     this.group.scale.set(
-      this.baseScale.x * (1 + activationStrength * 0.016),
-      this.baseScale.y * (1 - activationStrength * 0.01),
-      this.baseScale.z * (1 + activationStrength * 0.022),
+      this.baseScale.x * (1 + idleBreath * 0.7 + activationStrength * 0.016),
+      this.baseScale.y * (1 - idleBreath * 0.28 - activationStrength * 0.01),
+      this.baseScale.z * (1 + idleBreath + activationStrength * 0.022),
     );
 
-    this.membraneBody.position.z = -activationStrength * 0.02;
+    this.membraneBody.position.z = -activationStrength * 0.02 - idleBodyBreath * 0.018;
     this.membraneBody.scale.set(
-      1 + activationStrength * this.config.activation.bodyScaleBoost * 0.8,
-      1 - activationStrength * 0.04,
-      1 + activationStrength * this.config.activation.bodyScaleBoost,
+      1 + idleBodyBreath * 0.34 + activationStrength * activationConfig.bodyScaleBoost * 0.8,
+      1 - idleBodyBreath * 0.14 - activationStrength * 0.04,
+      1 + idleBodyBreath * 0.48 + activationStrength * activationConfig.bodyScaleBoost,
     );
 
-    this.membraneRim.position.z = this.config.geometry.body.depth * 0.18 + activationStrength * 0.014;
+    this.membraneRim.position.z =
+      this.config.geometry.body.depth * 0.18 +
+      activationStrength * 0.014 +
+      idleBodyBreath * 0.014;
     this.membraneRim.scale.set(
-      1 + activationStrength * this.config.activation.rimScaleBoost,
-      1 - activationStrength * 0.016,
-      1 + activationStrength * this.config.activation.rimScaleBoost,
+      1 + idleBodyBreath * 0.18 + activationStrength * activationConfig.rimScaleBoost,
+      1 - idleBodyBreath * 0.08 - activationStrength * 0.016,
+      1 + idleBodyBreath * 0.22 + activationStrength * activationConfig.rimScaleBoost,
     );
 
     this.activeSweepBand.position.x = lateralBandOffset;
     this.activeSweepBand.position.y =
       Math.sin(elapsed * 0.42 + phaseClamped * Math.PI) *
-      this.config.motion.bandBob *
-      motionScale;
+        motion.bandBob *
+        motionScale +
+      Math.sin(elapsed * 0.18 + 0.24) * motion.bandBob * 0.35 * introMotion;
     this.activeSweepBand.position.z =
-      this.bandBasePosition.z + activationStrength * this.config.activation.bandDepthBoost;
+      this.bandBasePosition.z + activationStrength * activationConfig.bandDepthBoost;
     this.activeSweepBand.rotation.z = THREE.MathUtils.lerp(-0.05, 0.05, phaseClamped);
     this.activeSweepBand.scale.set(
-      1 + activationStrength * this.config.activation.bandWidthBoost,
-      1 + activationStrength * this.config.activation.bandHeightBoost,
+      1 + idleBreath * 0.16 + activationStrength * activationConfig.bandWidthBoost,
+      1 + idleBreath * 0.1 + activationStrength * activationConfig.bandHeightBoost,
       1,
     );
     this.activeSweepBand.material.opacity =
-      this.config.activation.bandBaseOpacity +
-      activationStrength * this.config.activation.bandPulseOpacity;
+      activationConfig.bandBaseOpacity +
+      idleGlow * activationConfig.bandIdleOpacity +
+      activationStrength * activationConfig.bandPulseOpacity;
     this.activeSweepBand.material.color.copy(this.bandBaseColor);
 
     const veilOffset =
@@ -219,41 +251,74 @@ export class MembraneController {
     this.membraneHalo.position.x =
       this.haloBasePosition.x +
       Math.sin(elapsed * 0.22 + phaseClamped * Math.PI) *
-        this.config.motion.haloDriftX *
+        motion.haloDriftX *
         motionScale;
     this.membraneHalo.position.y =
       this.haloBasePosition.y +
       Math.cos(elapsed * 0.19 + 0.8) *
-        this.config.motion.haloDriftY *
+        motion.haloDriftY *
         motionScale;
     this.membraneHalo.scale.set(
-      this.haloBaseScale.x + activationStrength * this.config.activation.haloScaleXBoost,
-      this.haloBaseScale.y + activationStrength * this.config.activation.haloScaleYBoost,
+      this.haloBaseScale.x +
+        idleGlow * 0.08 +
+        activationStrength * activationConfig.haloScaleXBoost,
+      this.haloBaseScale.y +
+        idleGlow * 0.12 +
+        activationStrength * activationConfig.haloScaleYBoost,
       1,
     );
     this.membraneHalo.material.opacity =
-      this.config.activation.haloBaseOpacity +
-      activationStrength * this.config.activation.haloPulseOpacity;
+      activationConfig.haloBaseOpacity +
+      idleGlow * activationConfig.haloIdleOpacity +
+      activationStrength * activationConfig.haloPulseOpacity;
 
     this.materials.membrane.emissiveIntensity =
-      this.config.appearance.emissiveIntensity +
-      activationStrength * this.config.activation.bodyEmissiveBoost;
+      appearance.emissiveIntensity +
+      idleGlow * appearance.idleEmissivePulse +
+      activationStrength * activationConfig.bodyEmissiveBoost;
     this.materials.membrane.thickness =
-      this.config.appearance.thickness + activationStrength * this.config.activation.bodyThicknessBoost;
-    this.materials.membrane.ior = this.config.appearance.ior + activationStrength * 0.03;
+      appearance.thickness + activationStrength * activationConfig.bodyThicknessBoost;
+    this.materials.membrane.roughness = THREE.MathUtils.clamp(
+      appearance.roughness +
+        idleFrost * appearance.idleRoughnessDrift +
+        activationStrength * activationConfig.bodyRoughnessBoost,
+      0,
+      1,
+    );
+    this.materials.membrane.transmission = THREE.MathUtils.clamp(
+      appearance.transmission -
+        idleFrost * appearance.idleTransmissionDrift -
+        activationStrength * activationConfig.bodyTransmissionDip,
+      0.6,
+      1,
+    );
+    this.materials.membrane.ior = appearance.ior + activationStrength * 0.03;
     this.materials.membrane.attenuationDistance = Math.max(
-      0.28,
-      this.config.appearance.attenuationDistance - activationStrength * 0.18,
+      0.24,
+      appearance.attenuationDistance -
+        idleFrost * appearance.idleAttenuationDrift -
+        activationStrength * 0.18,
     );
     this.materials.membrane.envMapIntensity =
-      this.config.appearance.envMapIntensity + activationStrength * this.config.activation.bodyEnvBoost;
+      appearance.envMapIntensity + activationStrength * activationConfig.bodyEnvBoost;
 
     this.materials.membraneEdge.opacity =
-      this.config.appearance.rimOpacity + activationStrength * this.config.activation.rimOpacityBoost;
+      appearance.rimOpacity +
+      idleGlow * activationConfig.haloIdleOpacity * 0.4 +
+      activationStrength * activationConfig.rimOpacityBoost;
+    this.materials.membraneEdge.roughness = THREE.MathUtils.clamp(
+      appearance.rimRoughness +
+        idleFrost * appearance.idleRoughnessDrift * 0.45 +
+        activationStrength * activationConfig.rimRoughnessBoost,
+      0,
+      1,
+    );
     this.materials.membraneEdge.envMapIntensity =
-      this.config.appearance.rimEnvMapIntensity + activationStrength * this.config.activation.rimEnvBoost;
+      appearance.rimEnvMapIntensity + activationStrength * activationConfig.rimEnvBoost;
     this.materials.membraneEdge.emissiveIntensity =
-      this.config.appearance.rimEmissiveIntensity + activationStrength * 0.04;
+      appearance.rimEmissiveIntensity +
+      idleGlow * appearance.idleEmissivePulse * 0.8 +
+      activationStrength * 0.04;
   }
 
   destroy() {

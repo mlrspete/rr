@@ -35,7 +35,14 @@ export function createHeroMaterials(config) {
       clearcoat: membraneAppearance.clearcoat,
       clearcoatRoughness: membraneAppearance.clearcoatRoughness,
       specularIntensity: membraneAppearance.specularIntensity,
-      specularColor: new THREE.Color(config.palette.coolEdge),
+      specularColor: new THREE.Color(
+        membraneAppearance.specularColor ?? config.palette.coolEdge,
+      ),
+      sheen: membraneAppearance.sheen ?? 0,
+      sheenColor: new THREE.Color(
+        membraneAppearance.sheenColor ?? membraneAppearance.bodyColor,
+      ),
+      sheenRoughness: membraneAppearance.sheenRoughness ?? 1,
       transparent: true,
       opacity: membraneAppearance.opacity,
       envMapIntensity: membraneAppearance.envMapIntensity,
@@ -50,7 +57,14 @@ export function createHeroMaterials(config) {
       clearcoat: membraneAppearance.rimClearcoat,
       clearcoatRoughness: membraneAppearance.rimClearcoatRoughness,
       specularIntensity: 1,
-      specularColor: new THREE.Color(config.palette.coolEdge),
+      specularColor: new THREE.Color(
+        membraneAppearance.rimSpecularColor ?? config.palette.coolEdge,
+      ),
+      sheen: membraneAppearance.rimSheen ?? 0,
+      sheenColor: new THREE.Color(
+        membraneAppearance.rimSheenColor ?? membraneAppearance.rimColor,
+      ),
+      sheenRoughness: membraneAppearance.rimSheenRoughness ?? 1,
       transparent: true,
       opacity: membraneAppearance.rimOpacity,
       envMapIntensity: membraneAppearance.rimEnvMapIntensity,

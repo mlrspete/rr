@@ -24,13 +24,7 @@
         <div class="callout-stage" data-callout-layer aria-hidden="true"></div>
 
         <header class="top-rail" aria-label="Site frame">
-          <nav class="top-links" aria-label="Primary">
-            <span data-intro="nav">Campaigns</span>
-            <span data-intro="nav">Method</span>
-            <a data-intro="nav" href="mailto:hello@realrust.studio?subject=Start%20a%20conversation">
-              Contact
-            </a>
-          </nav>
+          <div class="top-links" aria-hidden="true"></div>
 
           <a class="wordmark" data-intro="wordmark" href="./" aria-label="REAL RUST home">
             REAL RUST
@@ -68,31 +62,27 @@
                 id="contact-panel"
                 data-contact-panel
                 role="group"
-                aria-label="Contact options"
+                aria-label="Contact email"
                 aria-hidden="true"
               >
-                <a
-                  class="contact-email"
-                  href="mailto:hello@realrust.studio?subject=Start%20a%20conversation"
-                >
+                <p class="contact-email" data-contact-email>
                   hello@realrust.studio
-                </a>
+                </p>
 
                 <div class="contact-options">
                   <button class="contact-option" type="button" data-copy-email>
                     Copy email
                   </button>
-
-                  <a
-                    class="contact-option"
-                    href="mailto:hello@realrust.studio?subject=Start%20a%20conversation"
-                  >
-                    Open mail
-                  </a>
                 </div>
-
-                <p class="contact-feedback" data-contact-feedback aria-live="polite" role="status"></p>
               </div>
+
+              <p
+                class="contact-feedback"
+                data-contact-feedback
+                aria-live="polite"
+                aria-atomic="true"
+                role="status"
+              ></p>
 
               <button
                 class="cta"

@@ -74,37 +74,12 @@ export function disposeHeroAssetInstance(instance) {
 }
 
 export function clearHeroAssetCache() {
-  const uniqueGeometries = new Set();
-  const uniqueMaterials = new Set();
+  for (const entry of assetTemplateCache.values()) {
+    if (!entry.template) {
+      continue;
+    }
 
-  for (const template of assetTemplateCache.values()) {
-    template.root.traverse((child) => {
-      if (!child.isMesh) {
-        return;
-      }
-
-      if (child.geometry) {
-        uniqueGeometries.add(child.geometry);
-      }
-
-      if (Array.isArray(child.material)) {
-        for (const material of child.material) {
-          if (material) {
-            uniqueMaterials.add(material);
-          }
-        }
-      } else if (child.material) {
-        uniqueMaterials.add(child.material);
-      }
-    });
-  }
-
-  for (const geometry of uniqueGeometries) {
-    geometry.dispose();
-  }
-
-  for (const material of uniqueMaterials) {
-    material.dispose();
+    disposeHeroAssetTemplate(entry.template);
   }
 
   assetTemplateCache.clear();
@@ -112,10 +87,28 @@ export function clearHeroAssetCache() {
 
 async function getOrLoadAssetTemplate(spec) {
   if (!assetTemplateCache.has(spec.key)) {
-    assetTemplateCache.set(spec.key, buildAssetTemplate(spec));
+    const entry = {
+      promise: null,
+      template: null,
+    };
+
+    entry.promise = buildAssetTemplate(spec)
+      .then((template) => {
+        entry.template = template;
+        return template;
+      })
+      .catch((error) => {
+        if (assetTemplateCache.get(spec.key) === entry) {
+          assetTemplateCache.delete(spec.key);
+        }
+
+        throw error;
+      });
+
+    assetTemplateCache.set(spec.key, entry);
   }
 
-  return assetTemplateCache.get(spec.key);
+  return assetTemplateCache.get(spec.key).promise;
 }
 
 async function buildAssetTemplate(spec) {
@@ -216,4 +209,37 @@ function cloneBounds(bounds) {
     radius: bounds.radius,
     halfHeight: bounds.halfHeight,
   };
+}
+
+function disposeHeroAssetTemplate(template) {
+  const uniqueGeometries = new Set();
+  const uniqueMaterials = new Set();
+
+  template.root.traverse((child) => {
+    if (!child.isMesh) {
+      return;
+    }
+
+    if (child.geometry) {
+      uniqueGeometries.add(child.geometry);
+    }
+
+    if (Array.isArray(child.material)) {
+      for (const material of child.material) {
+        if (material) {
+          uniqueMaterials.add(material);
+        }
+      }
+    } else if (child.material) {
+      uniqueMaterials.add(child.material);
+    }
+  });
+
+  for (const geometry of uniqueGeometries) {
+    geometry.dispose();
+  }
+
+  for (const material of uniqueMaterials) {
+    material.dispose();
+  }
 }

@@ -17,7 +17,9 @@ import {
   getHeroAssetSpec,
 } from "./heroAssetRegistry.js";
 import { createHeroAssetMaterial, createHeroMaterials } from "./materials.js";
+import { AmbientParticlesController } from "./controllers/AmbientParticlesController.js";
 import { MembraneController } from "./controllers/MembraneController.js";
+import { SphereStreamController } from "./controllers/SphereStreamController.js";
 
 export function createHeroScene({
   container,
@@ -78,7 +80,6 @@ export function createHeroScene({
 
   const materials = createHeroMaterials(heroConfig);
   const glowTexture = createGlowTexture();
-  const sphere = createSphereMesh(materials.sphere, heroConfig.sphere);
   const membraneController = new MembraneController({
     config: {
       ...heroConfig.membrane,
@@ -87,8 +88,20 @@ export function createHeroScene({
     materials,
     glowTexture,
   });
+  const sphereStreamController = new SphereStreamController({
+    config: heroConfig.sphereStream,
+    sphereConfig: heroConfig.sphere,
+    baseMaterial: materials.sphere,
+    reducedMotion,
+  });
+  const ambientParticlesController = new AmbientParticlesController({
+    config: heroConfig.ambientParticles,
+    palette: heroConfig.palette,
+    reducedMotion,
+  });
 
-  chamberRig.add(sphere);
+  stageRig.add(ambientParticlesController.group);
+  chamberRig.add(sphereStreamController.group);
   chamberRig.add(membraneController.group);
   createLights(lights, heroConfig.lights);
 
@@ -97,15 +110,17 @@ export function createHeroScene({
   const introState = { progress: reducedMotion ? 1 : 0 };
   const cycleState = createCycleState();
   const assetInstances = new Map();
+  const assetLoadPromises = new Map();
   const pathMarkers = {
     sphereStart: 0.025,
     sphereNear: 0.36,
     sphereImpact: 0.5,
     sphereHidden: 0.59,
     objectHidden: 0.61,
-    objectReveal: 0.74,
-    objectDrift: 0.87,
-    objectExit: 0.985,
+    objectReveal: 0.76,
+    objectDisplay: 0.84,
+    objectDrift: 0.91,
+    objectExit: 0.992,
   };
 
   let environmentTarget = null;
@@ -123,12 +138,15 @@ export function createHeroScene({
   let initialized = false;
   let isDestroyed = false;
   let hasPresentedFirstFrame = false;
+  let hasResolvedReady = false;
+  let resolveReadyPromise = () => {};
+  let assetActivationToken = 0;
   let translationCurve = createTranslationCurve(responsiveProfile.chamber);
+  const readyPromise = new Promise((resolve) => {
+    resolveReadyPromise = resolve;
+  });
 
-  if (currentAssetIndex === -1) {
-    currentAssetIndex = 0;
-    currentAssetKey = curatedHeroAssetKeys[0];
-  }
+  setCurrentAssetKey(currentAssetKey);
 
   const updatePointer = (nextX, nextY) => {
     targetPointer.x = THREE.MathUtils.clamp(nextX, -1, 1);
@@ -150,8 +168,46 @@ export function createHeroScene({
     updatePointer(0, 0);
   };
 
+  function resolveReady(value = currentAssetKey) {
+    if (hasResolvedReady) {
+      return;
+    }
+
+    hasResolvedReady = true;
+    resolveReadyPromise(value);
+  }
+
   function getActiveAssetInstance() {
     return assetInstances.get(currentAssetKey) ?? null;
+  }
+
+  function setCurrentAssetKey(nextAssetKey) {
+    currentAssetKey = getHeroAssetSpec(nextAssetKey).key;
+    currentAssetIndex = curatedHeroAssetKeys.indexOf(currentAssetKey);
+
+    if (currentAssetIndex === -1) {
+      currentAssetIndex = 0;
+      currentAssetKey = curatedHeroAssetKeys[0];
+    }
+
+    return currentAssetKey;
+  }
+
+  function applyEnvironment(environmentTexture) {
+    const previousTarget = environmentTarget;
+    const previousFallbackScene = environmentFallbackScene;
+
+    environmentTarget = environmentTexture?.target ?? null;
+    environmentFallbackScene = environmentTexture?.fallbackScene ?? null;
+    scene.environment = environmentTexture?.texture ?? null;
+
+    if (previousTarget && previousTarget !== environmentTarget) {
+      previousTarget.dispose();
+    }
+
+    if (previousFallbackScene && previousFallbackScene !== environmentFallbackScene) {
+      previousFallbackScene.dispose();
+    }
   }
 
   function syncActiveAssetVisibility() {
@@ -163,6 +219,72 @@ export function createHeroScene({
         instance.material.opacity = 0;
       }
     }
+  }
+
+  async function ensureAssetInstance(key) {
+    const resolvedKey = getHeroAssetSpec(key).key;
+
+    if (assetInstances.has(resolvedKey)) {
+      return assetInstances.get(resolvedKey);
+    }
+
+    if (!assetLoadPromises.has(resolvedKey)) {
+      let loadPromise;
+
+      loadPromise = loadHeroAssetInstance(resolvedKey, {
+        createMaterial: () => createHeroAssetMaterial(heroConfig),
+      })
+        .then((instance) => {
+          if (isDestroyed) {
+            disposeHeroAssetInstance(instance);
+            return null;
+          }
+
+          instance.group.visible = false;
+          instance.group.userData.phase = curatedHeroAssetKeys.indexOf(resolvedKey) * 0.9;
+          objectRig.add(instance.group);
+          assetInstances.set(resolvedKey, instance);
+          syncActiveAssetVisibility();
+          return instance;
+        })
+        .catch((error) => {
+          console.error(`REAL RUST hero could not load asset "${resolvedKey}".`, error);
+          return null;
+        })
+        .finally(() => {
+          if (assetLoadPromises.get(resolvedKey) === loadPromise) {
+            assetLoadPromises.delete(resolvedKey);
+          }
+        });
+
+      assetLoadPromises.set(resolvedKey, loadPromise);
+    }
+
+    return assetLoadPromises.get(resolvedKey);
+  }
+
+  async function activateAsset(nextAssetKey, { restartCycle = false } = {}) {
+    const resolvedKey = getHeroAssetSpec(nextAssetKey).key;
+    const activationToken = ++assetActivationToken;
+    const instance = await ensureAssetInstance(resolvedKey);
+
+    if (!instance || isDestroyed || activationToken !== assetActivationToken) {
+      return currentAssetKey;
+    }
+
+    setCurrentAssetKey(resolvedKey);
+    syncActiveAssetVisibility();
+
+    if (restartCycle) {
+      cycleTimeline?.pause(0);
+      resetCycleState(cycleState);
+
+      if (reducedMotion || introState.progress >= 1) {
+        cycleTimeline?.play(0);
+      }
+    }
+
+    return currentAssetKey;
   }
 
   function applyCameraPreset() {
@@ -183,6 +305,8 @@ export function createHeroScene({
 
   function applyLayout() {
     membraneController.setLayout(responsiveProfile.chamber.membrane);
+    sphereStreamController.setLayout(responsiveProfile.chamber);
+    ambientParticlesController.setLayout(responsiveProfile);
     translationCurve = createTranslationCurve(responsiveProfile.chamber);
     resetCycleState(cycleState);
   }
@@ -198,6 +322,7 @@ export function createHeroScene({
       accelerateDuration: heroConfig.cycle.accelerateDuration * cycleScale,
       translateDuration: heroConfig.cycle.translateDuration * cycleScale,
       emergeDuration: heroConfig.cycle.emergeDuration * cycleScale,
+      displayDuration: heroConfig.cycle.displayDuration * cycleScale,
       settleDuration: heroConfig.cycle.settleDuration * cycleScale,
       fadeDuration: heroConfig.cycle.fadeDuration * cycleScale,
     };
@@ -240,6 +365,9 @@ export function createHeroScene({
           impactScale: 1.05,
           exitScale: 1.04,
         };
+    const sphereApproachEase = reducedMotion ? "none" : "sine.in";
+    const sphereImpactEase = "none";
+    const sphereTranslateEase = reducedMotion ? "none" : "sine.out";
 
     cycleTimeline = gsap.timeline({
       paused: true,
@@ -250,9 +378,14 @@ export function createHeroScene({
           return;
         }
 
-        currentAssetIndex = (currentAssetIndex + 1) % curatedHeroAssetKeys.length;
-        currentAssetKey = curatedHeroAssetKeys[currentAssetIndex];
-        syncActiveAssetVisibility();
+        sphereStreamController.advanceLeadLane();
+
+        const nextAssetKey =
+          curatedHeroAssetKeys[(currentAssetIndex + 1) % curatedHeroAssetKeys.length];
+
+        if (nextAssetKey) {
+          void activateAsset(nextAssetKey);
+        }
       },
     });
 
@@ -265,7 +398,7 @@ export function createHeroScene({
           membraneActivation: cycleMotion.approachActivation,
           membranePhase: cycleMotion.approachPhase,
           duration: timings.approachDuration,
-          ease: "sine.inOut",
+          ease: sphereApproachEase,
         },
         timings.leadDelay,
       )
@@ -277,7 +410,7 @@ export function createHeroScene({
           membraneActivation: cycleMotion.impactActivation,
           membranePhase: cycleMotion.impactPhase,
           duration: timings.accelerateDuration,
-          ease: "power2.in",
+          ease: sphereImpactEase,
         },
         timings.leadDelay + timings.approachDuration,
       )
@@ -293,7 +426,7 @@ export function createHeroScene({
           membraneActivation: cycleMotion.translateActivation,
           membranePhase: cycleMotion.translatePhase,
           duration: timings.translateDuration,
-          ease: "power2.inOut",
+          ease: sphereTranslateEase,
         },
         timings.leadDelay + timings.approachDuration + timings.accelerateDuration,
       )
@@ -314,17 +447,24 @@ export function createHeroScene({
       .to(
         cycleState,
         {
+          objectProgress: pathMarkers.objectDisplay,
+          membraneActivation: cycleMotion.settleActivation * 0.9,
+          membranePhase: cycleMotion.settlePhase * 0.92,
+          duration: timings.displayDuration,
+          ease: "sine.out",
+        },
+        ">",
+      )
+      .to(
+        cycleState,
+        {
           objectProgress: pathMarkers.objectDrift,
           membraneActivation: cycleMotion.settleActivation,
           membranePhase: cycleMotion.settlePhase,
           duration: timings.settleDuration,
-          ease: "sine.out",
+          ease: "sine.inOut",
         },
-        timings.leadDelay +
-          timings.approachDuration +
-          timings.accelerateDuration +
-          timings.translateDuration +
-          0.1,
+        ">",
       )
       .to(
         cycleState,
@@ -335,7 +475,7 @@ export function createHeroScene({
           membraneActivation: cycleMotion.endActivation,
           membranePhase: cycleMotion.endPhase,
           duration: timings.fadeDuration,
-          ease: "power2.inOut",
+          ease: "power2.in",
         },
         ">",
       );
@@ -401,6 +541,10 @@ export function createHeroScene({
   }
 
   function render() {
+    if (isDestroyed) {
+      return;
+    }
+
     const elapsed = clock.getElapsedTime();
     const motionScale = responsiveProfile.motionScale;
     const interactionStrength = responsiveProfile.interactionStrength;
@@ -436,7 +580,19 @@ export function createHeroScene({
       heroConfig.camera.lookAt.z,
     );
 
-    applySphereState(sphere, materials.sphere, cycleState, translationCurve, elapsed);
+    sphereStreamController.update({
+      elapsed,
+      leadPathPhase: getLeadPathPhase(cycleState.sphereProgress, pathMarkers),
+      leadOpacity: cycleState.sphereOpacity,
+      leadScale: cycleState.sphereScale,
+      motionScale,
+    });
+    ambientParticlesController.update({
+      elapsed,
+      pointer,
+      introProgress: introState.progress,
+      motionScale,
+    });
     applyActiveAssetState(getActiveAssetInstance(), cycleState, translationCurve, elapsed);
     membraneController.update({
       elapsed,
@@ -450,84 +606,68 @@ export function createHeroScene({
 
     renderer.render(scene, camera);
 
-    if (!hasPresentedFirstFrame && initialized) {
+    if (!hasPresentedFirstFrame) {
       hasPresentedFirstFrame = true;
       container.dataset.ready = "true";
+      resolveReady(currentAssetKey);
     }
 
     animationFrame = window.requestAnimationFrame(render);
   }
 
-  async function initialize() {
+  async function enhanceEnvironment() {
     try {
-      const [environmentTexture] = await Promise.all([
-        loadEnvironmentTexture({
-          pmremGenerator,
-          exrLoader,
-        }),
-        Promise.all(
-          curatedHeroAssetKeys.map(async (key, index) => {
-            const instance = await loadHeroAssetInstance(key, {
-              createMaterial: () => createHeroAssetMaterial(heroConfig),
-            });
-
-            instance.group.visible = false;
-            instance.group.userData.phase = index * 0.9;
-            objectRig.add(instance.group);
-            assetInstances.set(key, instance);
-          }),
-        ),
-      ]);
+      const environmentTexture = await loadEnvironmentTexture({
+        pmremGenerator,
+        exrLoader,
+      });
 
       if (isDestroyed) {
-        for (const instance of assetInstances.values()) {
-          disposeHeroAssetInstance(instance);
-        }
-
         environmentTexture.target?.dispose?.();
         environmentTexture.fallbackScene?.dispose?.();
         return;
       }
 
-      environmentTarget = environmentTexture.target;
-      environmentFallbackScene = environmentTexture.fallbackScene ?? null;
-      scene.environment = environmentTexture.texture;
+      applyEnvironment(environmentTexture);
+    } catch (error) {
+      console.warn(
+        "REAL RUST hero could not load ferndale_studio_06_4k.exr. Keeping fallback environment.",
+        error,
+      );
+    }
+  }
 
-      syncActiveAssetVisibility();
+  async function initialize() {
+    try {
+      applyEnvironment(createFallbackEnvironmentTexture({ pmremGenerator }));
       resize();
       rebuildCycleTimeline();
       initialized = true;
+
+      void ensureAssetInstance(currentAssetKey);
+      readyPromise.then((readyKey) => {
+        if (!readyKey || isDestroyed) {
+          return;
+        }
+
+        void enhanceEnvironment();
+      });
+
       startIntro();
-      preloadAssets(curatedHeroAssetKeys.filter((key) => key !== currentAssetKey));
       render();
     } catch (error) {
+      resolveReady(null);
       console.error("REAL RUST hero failed to initialize.", error);
     }
   }
 
   function setAsset(nextAssetKey = defaultHeroAssetKey) {
-    const resolvedKey = getHeroAssetSpec(nextAssetKey).key;
-    currentAssetKey = resolvedKey;
-    currentAssetIndex = curatedHeroAssetKeys.indexOf(resolvedKey);
-
-    if (currentAssetIndex === -1) {
-      currentAssetIndex = 0;
-      currentAssetKey = curatedHeroAssetKeys[0];
-    }
-
     if (!initialized) {
+      setCurrentAssetKey(nextAssetKey);
       return Promise.resolve(currentAssetKey);
     }
 
-    syncActiveAssetVisibility();
-    cycleTimeline?.pause(0);
-    resetCycleState(cycleState);
-
-    if (reducedMotion || introState.progress >= 1) {
-      cycleTimeline?.play(0);
-    }
-
-    return Promise.resolve(currentAssetKey);
+    return activateAsset(nextAssetKey, { restartCycle: true });
   }
 
   function preloadAssets(keys = []) {
@@ -535,10 +675,15 @@ export function createHeroScene({
       return Promise.resolve([]);
     }
 
-    return preloadHeroAssets(keys);
+    return readyPromise.then((readyKey) => {
+      if (!readyKey || isDestroyed) {
+        return [];
+      }
+
+      return preloadHeroAssets(keys);
+    });
   }
 
-  resize();
   initialize();
 
   if (interactionTarget instanceof EventTarget) {
@@ -558,11 +703,15 @@ export function createHeroScene({
   return {
     setAsset,
     preloadAssets,
+    whenReady() {
+      return readyPromise;
+    },
     getAssetKey() {
       return currentAssetKey;
     },
     destroy() {
       isDestroyed = true;
+      resolveReady(null);
       window.cancelAnimationFrame(animationFrame);
       introTimeline?.kill();
       cycleTimeline?.kill();
@@ -583,13 +732,14 @@ export function createHeroScene({
       }
 
       membraneController.destroy();
+      sphereStreamController.destroy();
+      ambientParticlesController.destroy();
       glowTexture.dispose();
       environmentTarget?.dispose?.();
       environmentFallbackScene?.dispose?.();
       pmremGenerator.dispose();
       clearHeroAssetCache();
 
-      sphere.geometry.dispose();
       materials.sphere.dispose();
       materials.rustObject.dispose();
       materials.membrane.dispose();
@@ -609,50 +759,31 @@ export function createHeroScene({
   };
 }
 
-function createSphereMesh(material, config) {
-  const geometry = new THREE.SphereGeometry(
-    config.radius,
-    config.widthSegments,
-    config.heightSegments,
-  );
-  geometry.computeVertexNormals();
+function createFallbackEnvironmentTexture({ pmremGenerator }) {
+  const fallbackScene = new RoomEnvironment();
+  const target = pmremGenerator.fromScene(fallbackScene, 0.04);
 
-  const mesh = new THREE.Mesh(geometry, material);
-  mesh.name = "chromeSphere";
-  mesh.renderOrder = 2;
-  return mesh;
+  return {
+    texture: target.texture,
+    target,
+    fallbackScene,
+  };
 }
 
 async function loadEnvironmentTexture({ pmremGenerator, exrLoader }) {
   pmremGenerator.compileEquirectangularShader();
 
-  try {
-    const exrTexture = await exrLoader.loadAsync(ferndaleStudioHdriUrl);
-    exrTexture.mapping = THREE.EquirectangularReflectionMapping;
+  const exrTexture = await exrLoader.loadAsync(ferndaleStudioHdriUrl);
+  exrTexture.mapping = THREE.EquirectangularReflectionMapping;
 
-    const target = pmremGenerator.fromEquirectangular(exrTexture);
-    exrTexture.dispose();
+  const target = pmremGenerator.fromEquirectangular(exrTexture);
+  exrTexture.dispose();
 
-    return {
-      texture: target.texture,
-      target,
-      fallbackScene: null,
-    };
-  } catch (error) {
-    console.warn(
-      "REAL RUST hero could not load ferndale_studio_06_4k.exr. Falling back to RoomEnvironment.",
-      error,
-    );
-
-    const fallbackScene = new RoomEnvironment();
-    const target = pmremGenerator.fromScene(fallbackScene, 0.04);
-
-    return {
-      texture: target.texture,
-      target,
-      fallbackScene,
-    };
-  }
+  return {
+    texture: target.texture,
+    target,
+    fallbackScene: null,
+  };
 }
 
 function createLights(target, lightsConfig) {
@@ -738,29 +869,6 @@ function createGlowTexture() {
   return texture;
 }
 
-function applySphereState(sphere, material, cycleState, translationCurve, elapsed) {
-  const progress = THREE.MathUtils.clamp(cycleState.sphereProgress, 0, 1);
-  const point = translationCurve.getPointAt(progress);
-  const tangent = translationCurve.getTangentAt(progress);
-  const stagingInfluence = 1 - smoothstep(progress / 0.2);
-  const idleOffset =
-    Math.sin(elapsed * heroConfig.sphere.idleFloatSpeed) *
-    heroConfig.sphere.idleFloatAmplitude *
-    cycleState.sphereOpacity;
-  const driftX = Math.sin(elapsed * 0.48 + 0.2) * 0.04 * stagingInfluence;
-  const driftZ = Math.cos(elapsed * 0.36 + 0.9) * 0.025 * stagingInfluence;
-
-  sphere.position.set(
-    point.x + driftX + tangent.x * 0.02,
-    point.y + idleOffset,
-    point.z + driftZ,
-  );
-  sphere.scale.setScalar(cycleState.sphereScale);
-  material.opacity = cycleState.sphereOpacity;
-  material.transparent = cycleState.sphereOpacity < 0.999;
-  sphere.visible = cycleState.sphereOpacity > 0.002;
-}
-
 function applyActiveAssetState(instance, cycleState, translationCurve, elapsed) {
   if (!instance) {
     return;
@@ -830,6 +938,18 @@ function getCycleResetState() {
 
 function resetCycleState(cycleState) {
   Object.assign(cycleState, getCycleResetState());
+}
+
+function getLeadPathPhase(progress, pathMarkers) {
+  return THREE.MathUtils.clamp(
+    THREE.MathUtils.inverseLerp(
+      pathMarkers.sphereStart,
+      pathMarkers.sphereHidden,
+      progress,
+    ),
+    0,
+    1,
+  );
 }
 
 function smoothstep(value) {
