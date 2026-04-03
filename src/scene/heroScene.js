@@ -1,38 +1,23 @@
 import * as THREE from "three";
 import { gsap } from "gsap";
 import { RoomEnvironment } from "three/examples/jsm/environments/RoomEnvironment.js";
-import { EffectComposer } from "three/examples/jsm/postprocessing/EffectComposer.js";
-import { OutputPass } from "three/examples/jsm/postprocessing/OutputPass.js";
-import { RenderPass } from "three/examples/jsm/postprocessing/RenderPass.js";
-import { ShaderPass } from "three/examples/jsm/postprocessing/ShaderPass.js";
-import { UnrealBloomPass } from "three/examples/jsm/postprocessing/UnrealBloomPass.js";
+import { EXRLoader } from "three/examples/jsm/loaders/EXRLoader.js";
 
+import ferndaleStudioHdriUrl from "../../ferndale_studio_06_4k.exr?url";
+import { getHeroResponsiveProfile, heroConfig } from "./config.js";
 import {
-  getHeroLayoutPreset,
-  getHeroResponsiveProfile,
-  heroConfig,
-} from "./config.js";
-import { clearHeroAssetCache, preloadHeroAssets } from "./heroAssetLoader.js";
+  clearHeroAssetCache,
+  disposeHeroAssetInstance,
+  loadHeroAssetInstance,
+  preloadHeroAssets,
+} from "./heroAssetLoader.js";
 import {
   curatedHeroAssetKeys,
   defaultHeroAssetKey,
   getHeroAssetSpec,
 } from "./heroAssetRegistry.js";
-import {
-  clearPremiumShapeCache,
-  preloadPremiumShapes,
-} from "./premiumShapeLibrary.js";
-import {
-  findHeroClusterPresetIndexForAsset,
-  getHeroClusterPreset,
-  heroClusterPresets,
-  rotatePresetKeys,
-} from "./heroClusterPresets.js";
-import { HeroLoopController } from "./controllers/HeroLoopController.js";
-import { MembraneController } from "./controllers/MembraneController.js";
-import { SlotController } from "./controllers/SlotController.js";
 import { createHeroAssetMaterial, createHeroMaterials } from "./materials.js";
-import { createCalloutOverlay } from "../ui/calloutOverlay.js";
+import { MembraneController } from "./controllers/MembraneController.js";
 
 export function createHeroScene({
   container,
@@ -65,91 +50,35 @@ export function createHeroScene({
   renderer.domElement.className = "hero-webgl";
   container.replaceChildren(renderer.domElement);
 
-  const pmremGenerator = new THREE.PMREMGenerator(renderer);
-  const environmentScene = new RoomEnvironment();
-  const environmentTarget = pmremGenerator.fromScene(environmentScene, 0.06);
-
   const scene = new THREE.Scene();
-  scene.environment = environmentTarget.texture;
   scene.fog = new THREE.FogExp2(heroConfig.palette.fog, heroConfig.fogDensity);
 
-  const camera = new THREE.PerspectiveCamera(heroConfig.camera.desktop.fov, 1, 0.1, 60);
+  const camera = new THREE.PerspectiveCamera(heroConfig.camera.desktop.fov, 1, 0.1, 50);
   const clock = new THREE.Clock();
-
-  let currentLeadAssetKey = getHeroAssetSpec(assetKey).key;
-  let currentPresetIndex = findHeroClusterPresetIndexForAsset(currentLeadAssetKey);
-  let currentClusterPreset = getHeroClusterPreset(currentPresetIndex);
-  let responsiveProfile = getHeroResponsiveProfile(container.clientWidth || window.innerWidth, reducedMotion);
-  let layoutPreset = getHeroLayoutPreset(container.clientWidth || window.innerWidth);
-  renderer.setPixelRatio(getRendererPixelRatio(window.devicePixelRatio, responsiveProfile));
-
-  const materials = createHeroMaterials(heroConfig);
-  const glowTexture = createGlowTexture();
-  const postprocessing = createPostProcessing({
-    renderer,
-    scene,
-    camera,
-    width: container.clientWidth || window.innerWidth,
-    height: container.clientHeight || window.innerHeight,
-    responsiveProfile,
-  });
-
-  const calloutContainer =
-    container.closest(".site-shell")?.querySelector("[data-callout-layer]") ??
-    (interactionTarget instanceof HTMLElement
-      ? interactionTarget
-      : container.parentElement ?? container);
-  const calloutOverlay = createCalloutOverlay({
-    container: calloutContainer,
-    maxPerSide: heroConfig.callouts.maxPerSide,
-    duration: heroConfig.callouts.duration,
-    sideOffsetX: heroConfig.callouts.sideOffsetX,
-    sideOffsetY: heroConfig.callouts.sideOffsetY,
-    fadeDuration: heroConfig.callouts.fadeDuration,
-    safeInsetX: heroConfig.callouts.safeInsetX,
-    safeInsetTop: heroConfig.callouts.safeInsetTop,
-    safeInsetBottom: heroConfig.callouts.safeInsetBottom,
-  });
+  const pmremGenerator = new THREE.PMREMGenerator(renderer);
+  const exrLoader = new EXRLoader();
 
   const introRig = new THREE.Group();
-  const motionRig = new THREE.Group();
-  const atmosphereRig = new THREE.Group();
-  const leftCluster = new THREE.Group();
-  const rightCluster = new THREE.Group();
-  const particleField = new THREE.Group();
+  const stageRig = new THREE.Group();
+  const chamberRig = new THREE.Group();
+  const objectRig = new THREE.Group();
   const lights = new THREE.Group();
 
   introRig.name = "heroIntro";
-  motionRig.name = "heroMotion";
-  atmosphereRig.name = "atmosphere";
-  leftCluster.name = "leftCluster";
-  rightCluster.name = "rightCluster";
-  particleField.name = "particleField";
+  stageRig.name = "translationStage";
+  chamberRig.name = "translationChamber";
+  objectRig.name = "translatedObjectRig";
   lights.name = "lights";
 
-  introRig.add(motionRig);
-  motionRig.add(atmosphereRig);
-  motionRig.add(leftCluster);
-  motionRig.add(rightCluster);
-  motionRig.add(particleField);
+  introRig.add(stageRig);
+  stageRig.add(chamberRig);
+  chamberRig.add(objectRig);
   scene.add(introRig);
   scene.add(lights);
 
-  const atmosphere = createAtmosphere({ glowTexture, materials });
-  atmosphereRig.add(atmosphere.backdrop);
-  atmosphereRig.add(atmosphere.coolZone);
-  atmosphereRig.add(atmosphere.warmZone);
-  atmosphereRig.add(atmosphere.neutralZone);
-
-  let particleSystem = createDustField({
-    material: materials.dust,
-    responsiveProfile,
-    particlesConfig: heroConfig.particles,
-  });
-  particleField.add(particleSystem.group);
-
-  createLights(lights, heroConfig.lights);
-
+  const materials = createHeroMaterials(heroConfig);
+  const glowTexture = createGlowTexture();
+  const sphere = createSphereMesh(materials.sphere, heroConfig.sphere);
   const membraneController = new MembraneController({
     config: {
       ...heroConfig.membrane,
@@ -158,63 +87,48 @@ export function createHeroScene({
     materials,
     glowTexture,
   });
-  motionRig.add(membraneController.group);
 
-  const materialFactory = (spec) => createHeroAssetMaterial(heroConfig, spec);
-  const slotControllerMap = createSlotControllerMap({
-    layoutPreset,
-    clusterPreset: currentClusterPreset,
-    leadAssetKey: currentLeadAssetKey,
-    slotConfig: heroConfig.slot,
-    materials,
-    createMaterial: materialFactory,
-  });
-  const slotControllers = slotControllerMap.all;
+  chamberRig.add(sphere);
+  chamberRig.add(membraneController.group);
+  createLights(lights, heroConfig.lights);
 
-  for (const slot of slotControllerMap.left) {
-    leftCluster.add(slot.group);
-  }
-
-  for (const slot of slotControllerMap.right) {
-    rightCluster.add(slot.group);
-  }
-
-  const heroLoopController = new HeroLoopController({
-    membraneConfig: heroConfig.membrane.sweep,
-    calloutConfig: heroConfig.callouts,
-    calloutOverlay,
-    slotControllers,
-    onCycleBoundary: () => {
-      void cycleClusterPreset();
-    },
-  });
-
-  const introState = { progress: reducedMotion ? 1 : 0 };
   const pointer = { x: 0, y: 0 };
   const targetPointer = { x: 0, y: 0 };
-  const cameraBase = { ...heroConfig.camera.desktop.position };
-  const clusterBase = {
-    left: {
-      position: new THREE.Vector3(),
-      rotation: new THREE.Euler(),
-    },
-    right: {
-      position: new THREE.Vector3(),
-      rotation: new THREE.Euler(),
-    },
+  const introState = { progress: reducedMotion ? 1 : 0 };
+  const cycleState = createCycleState();
+  const assetInstances = new Map();
+  const pathMarkers = {
+    sphereStart: 0.025,
+    sphereNear: 0.36,
+    sphereImpact: 0.5,
+    sphereHidden: 0.59,
+    objectHidden: 0.61,
+    objectReveal: 0.74,
+    objectDrift: 0.87,
+    objectExit: 0.985,
   };
-  const membraneWorldInverse = new THREE.Matrix4();
 
+  let environmentTarget = null;
+  let environmentFallbackScene = null;
+  let currentAssetKey = getHeroAssetSpec(assetKey).key;
+  let currentAssetIndex = curatedHeroAssetKeys.indexOf(currentAssetKey);
+  let responsiveProfile = getHeroResponsiveProfile(
+    container.clientWidth || window.innerWidth,
+    reducedMotion,
+  );
   let resizeObserver;
   let animationFrame = 0;
   let introTimeline = null;
-  let loopRebuildHandle = 0;
+  let cycleTimeline = null;
+  let initialized = false;
   let isDestroyed = false;
   let hasPresentedFirstFrame = false;
-  let slotsInitialized = false;
-  let introComplete = reducedMotion;
-  let presetCycleCount = 0;
-  let activePresetRequest = Promise.resolve();
+  let translationCurve = createTranslationCurve(responsiveProfile.chamber);
+
+  if (currentAssetIndex === -1) {
+    currentAssetIndex = 0;
+    currentAssetKey = curatedHeroAssetKeys[0];
+  }
 
   const updatePointer = (nextX, nextY) => {
     targetPointer.x = THREE.MathUtils.clamp(nextX, -1, 1);
@@ -236,251 +150,218 @@ export function createHeroScene({
     updatePointer(0, 0);
   };
 
-  const setCameraPreset = () => {
-    const preset =
-      responsiveProfile.viewportKey === "mobile"
-        ? heroConfig.camera.mobile
-        : responsiveProfile.viewportKey === "tablet"
-          ? heroConfig.camera.tablet
-          : heroConfig.camera.desktop;
+  function getActiveAssetInstance() {
+    return assetInstances.get(currentAssetKey) ?? null;
+  }
+
+  function syncActiveAssetVisibility() {
+    for (const [key, instance] of assetInstances) {
+      const isActive = key === currentAssetKey;
+      instance.group.visible = isActive;
+
+      if (!isActive && instance.material) {
+        instance.material.opacity = 0;
+      }
+    }
+  }
+
+  function applyCameraPreset() {
+    const preset = responsiveProfile.camera;
 
     camera.fov = preset.fov;
-    cameraBase.x = preset.position.x;
-    cameraBase.y = preset.position.y;
-    cameraBase.z = preset.position.z;
-    camera.updateProjectionMatrix();
-  };
-
-  const scheduleLoopRebuild = () => {
-    if (!slotsInitialized) {
-      return;
-    }
-
-    if (loopRebuildHandle) {
-      window.clearTimeout(loopRebuildHandle);
-    }
-
-    loopRebuildHandle = window.setTimeout(() => {
-      loopRebuildHandle = 0;
-      heroLoopController.rebuild();
-    }, heroConfig.loop.rebuildDebounceMs);
-  };
-
-  const applySceneLayout = () => {
-    applyLayoutPreset({
-      layoutPreset,
-      responsiveProfile,
-      membraneController,
-      atmosphere,
-      clusters: { leftCluster, rightCluster },
-      clusterBase,
-      slotControllerMap,
-      heroLoopController,
-      clusterPreset: currentClusterPreset,
-    });
-  };
-
-  const resize = () => {
-    const width = container.clientWidth || window.innerWidth;
-    const height = container.clientHeight || window.innerHeight;
-    const previousViewportKey = responsiveProfile.viewportKey;
-    const previousDustCount = responsiveProfile.dustCount;
-
-    responsiveProfile = getHeroResponsiveProfile(width, reducedMotion);
-    layoutPreset = getHeroLayoutPreset(width);
-
-    const pixelRatio = getRendererPixelRatio(window.devicePixelRatio, responsiveProfile);
-    renderer.setPixelRatio(pixelRatio);
-    renderer.setSize(width, height, false);
-    postprocessing.composer.setPixelRatio?.(pixelRatio);
-    postprocessing.composer.setSize(width, height);
-    postprocessing.bloomPass.setSize(width, height);
-    postprocessing.bloomPass.strength = responsiveProfile.bloomStrength;
-    postprocessing.bloomPass.radius = responsiveProfile.bloomRadius;
-    postprocessing.bloomPass.threshold = responsiveProfile.bloomThreshold;
-    postprocessing.finishPass.uniforms.uRgbShift.value = responsiveProfile.rgbShift;
-    postprocessing.finishPass.uniforms.uVignette.value = responsiveProfile.vignette;
-    postprocessing.finishPass.uniforms.uGrain.value = responsiveProfile.grain;
-
-    if (
-      previousViewportKey !== responsiveProfile.viewportKey ||
-      previousDustCount !== responsiveProfile.dustCount
-    ) {
-      particleField.remove(particleSystem.group);
-      particleSystem.destroy();
-      particleSystem = createDustField({
-        material: materials.dust,
-        responsiveProfile,
-        particlesConfig: heroConfig.particles,
-      });
-      particleField.add(particleSystem.group);
-    }
-
-    setCameraPreset();
-    applySceneLayout();
-
-    camera.aspect = width / height;
-    camera.position.set(cameraBase.x, cameraBase.y, cameraBase.z);
+    camera.aspect =
+      (container.clientWidth || window.innerWidth) /
+      (container.clientHeight || window.innerHeight);
+    camera.position.set(preset.position.x, preset.position.y, preset.position.z);
     camera.lookAt(
       heroConfig.camera.lookAt.x,
       heroConfig.camera.lookAt.y,
       heroConfig.camera.lookAt.z,
     );
     camera.updateProjectionMatrix();
+  }
 
-    scheduleLoopRebuild();
-  };
+  function applyLayout() {
+    membraneController.setLayout(responsiveProfile.chamber.membrane);
+    translationCurve = createTranslationCurve(responsiveProfile.chamber);
+    resetCycleState(cycleState);
+  }
 
-  const render = () => {
-    const elapsed = clock.getElapsedTime();
-    const interactionStrength = responsiveProfile.interactionStrength;
-    const atmosphereStrength = responsiveProfile.atmosphereStrength;
-    const motionScale = responsiveProfile.motionScale;
-    const smoothFactor = 0.035 + interactionStrength * 0.012;
+  function rebuildCycleTimeline() {
+    const shouldPlay = cycleTimeline?.isActive?.() ?? false;
+    cycleTimeline?.kill();
 
-    pointer.x += (targetPointer.x - pointer.x) * smoothFactor;
-    pointer.y += (targetPointer.y - pointer.y) * smoothFactor;
+    const cycleScale = responsiveProfile.cycleScale;
+    const timings = {
+      leadDelay: heroConfig.cycle.leadDelay * cycleScale,
+      approachDuration: heroConfig.cycle.approachDuration * cycleScale,
+      accelerateDuration: heroConfig.cycle.accelerateDuration * cycleScale,
+      translateDuration: heroConfig.cycle.translateDuration * cycleScale,
+      emergeDuration: heroConfig.cycle.emergeDuration * cycleScale,
+      settleDuration: heroConfig.cycle.settleDuration * cycleScale,
+      fadeDuration: heroConfig.cycle.fadeDuration * cycleScale,
+    };
+    const cycleMotion = reducedMotion
+      ? {
+          approachActivation: 0.12,
+          approachPhase: 0.08,
+          impactActivation: 0.4,
+          impactPhase: 0.24,
+          translateActivation: 0.54,
+          translatePhase: 0.42,
+          emergeActivation: 0.34,
+          emergePhase: 0.58,
+          settleActivation: 0.08,
+          settlePhase: 0.28,
+          endActivation: 0.03,
+          endPhase: 0.06,
+          hiddenSphereOpacity: 0.22,
+          hiddenObjectOpacity: 0.04,
+          hiddenObjectScale: 0.96,
+          impactScale: 1.02,
+          exitScale: 1.02,
+        }
+      : {
+          approachActivation: 0.22,
+          approachPhase: 0.12,
+          impactActivation: 0.82,
+          impactPhase: 0.48,
+          translateActivation: 1.08,
+          translatePhase: 0.7,
+          emergeActivation: 0.76,
+          emergePhase: 1,
+          settleActivation: 0.14,
+          settlePhase: 0.84,
+          endActivation: 0.04,
+          endPhase: 0.08,
+          hiddenSphereOpacity: 0.05,
+          hiddenObjectOpacity: 0.08,
+          hiddenObjectScale: 0.92,
+          impactScale: 1.05,
+          exitScale: 1.04,
+        };
 
-    const introProgress = introState.progress;
-    const loopState = heroLoopController.getState();
-    const basePulse =
-      (Math.sin(elapsed * 0.46 + 0.3) * 0.5 + 0.5) *
-      responsiveProfile.pulseAmplitude *
-      introProgress;
-    const baseFlash =
-      (Math.sin(elapsed * 0.34 - 0.6) * 0.5 + 0.5) *
-      responsiveProfile.flashAmplitude *
-      0.28 *
-      introProgress;
-    const membranePulse = basePulse + loopState.pulse;
-    const membraneFlash = baseFlash + loopState.flash;
-    const idleFloat =
-      Math.sin(elapsed * heroConfig.motion.idleFloatSpeed) *
-      heroConfig.motion.idleFloatAmplitude *
-      motionScale;
+    cycleTimeline = gsap.timeline({
+      paused: true,
+      repeat: -1,
+      repeatDelay: heroConfig.cycle.repeatDelay * cycleScale,
+      onRepeat: () => {
+        if (isDestroyed) {
+          return;
+        }
 
-    motionRig.position.y = idleFloat * introProgress;
-    motionRig.rotation.y =
-      pointer.x * heroConfig.motion.pointerRotationY * interactionStrength * motionScale +
-      Math.sin(elapsed * 0.16) * 0.012 * introProgress * motionScale;
-    motionRig.rotation.x =
-      -pointer.y * heroConfig.motion.pointerRotationX * interactionStrength * motionScale;
-    motionRig.position.x =
-      pointer.x * heroConfig.motion.pointerShiftX * interactionStrength * motionScale;
-    motionRig.position.z =
-      pointer.y * heroConfig.motion.pointerShiftY * interactionStrength * motionScale;
-
-    atmosphereRig.position.x =
-      -pointer.x * heroConfig.motion.depthParallaxX * interactionStrength * motionScale;
-    atmosphereRig.position.y =
-      -pointer.y * heroConfig.motion.depthParallaxY * interactionStrength * motionScale +
-      Math.sin(elapsed * 0.12) *
-        heroConfig.motion.atmosphereDrift *
-        0.5 *
-        atmosphereStrength *
-        motionScale;
-
-    updateAtmosphere(atmosphere, {
-      elapsed,
-      pointer,
-      interactionStrength,
-      atmosphereStrength,
-      motionScale,
+        currentAssetIndex = (currentAssetIndex + 1) % curatedHeroAssetKeys.length;
+        currentAssetKey = curatedHeroAssetKeys[currentAssetIndex];
+        syncActiveAssetVisibility();
+      },
     });
 
-    updateClusterGroup(leftCluster, clusterBase.left, {
-      elapsed,
-      pointer,
-      interactionStrength,
-      atmosphereStrength,
-      parallaxDirection: -1,
-      motionScale,
-    });
-    updateClusterGroup(rightCluster, clusterBase.right, {
-      elapsed,
-      pointer,
-      interactionStrength,
-      atmosphereStrength,
-      parallaxDirection: 1,
-      motionScale,
-    });
+    cycleTimeline
+      .set(cycleState, getCycleResetState(), 0)
+      .to(
+        cycleState,
+        {
+          sphereProgress: pathMarkers.sphereNear,
+          membraneActivation: cycleMotion.approachActivation,
+          membranePhase: cycleMotion.approachPhase,
+          duration: timings.approachDuration,
+          ease: "sine.inOut",
+        },
+        timings.leadDelay,
+      )
+      .to(
+        cycleState,
+        {
+          sphereProgress: pathMarkers.sphereImpact,
+          sphereScale: cycleMotion.impactScale,
+          membraneActivation: cycleMotion.impactActivation,
+          membranePhase: cycleMotion.impactPhase,
+          duration: timings.accelerateDuration,
+          ease: "power2.in",
+        },
+        timings.leadDelay + timings.approachDuration,
+      )
+      .to(
+        cycleState,
+        {
+          sphereProgress: pathMarkers.sphereHidden,
+          sphereScale: 0.86,
+          sphereOpacity: cycleMotion.hiddenSphereOpacity,
+          objectProgress: pathMarkers.objectHidden,
+          objectOpacity: cycleMotion.hiddenObjectOpacity,
+          objectScale: cycleMotion.hiddenObjectScale,
+          membraneActivation: cycleMotion.translateActivation,
+          membranePhase: cycleMotion.translatePhase,
+          duration: timings.translateDuration,
+          ease: "power2.inOut",
+        },
+        timings.leadDelay + timings.approachDuration + timings.accelerateDuration,
+      )
+      .to(
+        cycleState,
+        {
+          sphereOpacity: 0,
+          objectOpacity: 1,
+          objectScale: 1,
+          objectProgress: pathMarkers.objectReveal,
+          membraneActivation: cycleMotion.emergeActivation,
+          membranePhase: cycleMotion.emergePhase,
+          duration: timings.emergeDuration,
+          ease: "power3.out",
+        },
+        timings.leadDelay + timings.approachDuration + timings.accelerateDuration - 0.04,
+      )
+      .to(
+        cycleState,
+        {
+          objectProgress: pathMarkers.objectDrift,
+          membraneActivation: cycleMotion.settleActivation,
+          membranePhase: cycleMotion.settlePhase,
+          duration: timings.settleDuration,
+          ease: "sine.out",
+        },
+        timings.leadDelay +
+          timings.approachDuration +
+          timings.accelerateDuration +
+          timings.translateDuration +
+          0.1,
+      )
+      .to(
+        cycleState,
+        {
+          objectProgress: pathMarkers.objectExit,
+          objectOpacity: 0,
+          objectScale: cycleMotion.exitScale,
+          membraneActivation: cycleMotion.endActivation,
+          membranePhase: cycleMotion.endPhase,
+          duration: timings.fadeDuration,
+          ease: "power2.inOut",
+        },
+        ">",
+      );
 
-    membraneController.update({
-      elapsed,
-      introProgress,
-      pointer,
-      interactionStrength,
-      atmosphereStrength,
-      motionScale,
-      activationScale: responsiveProfile.membraneActivationScale,
-      sweepWorldX: loopState.sweepX,
-      pulse: membranePulse,
-      flash: membraneFlash,
-      direction: loopState.direction,
-      clusterTargets: [leftCluster.position.x, rightCluster.position.x],
-    });
-    membraneController.group.updateMatrixWorld(true);
-    membraneWorldInverse.copy(membraneController.group.matrixWorld).invert();
-
-    for (const slot of slotControllers) {
-      slot.update({
-        elapsed,
-        introProgress,
-        direction: loopState.direction,
-        membraneWorldInverse,
-        motionScale: responsiveProfile.slotMotionScale,
-        fxScale: responsiveProfile.conversionFxScale,
-      });
+    if (shouldPlay || reducedMotion || introState.progress >= 1) {
+      cycleTimeline.play(0);
     }
+  }
 
-    updateDustField(particleSystem, {
-      elapsed,
-      pointer,
-      interactionStrength,
-      atmosphereStrength,
-      motionScale,
-    });
+  function resize() {
+    const width = container.clientWidth || window.innerWidth;
+    const height = container.clientHeight || window.innerHeight;
 
-    materials.backdrop.opacity =
-      heroConfig.materials.backdropOpacity +
-      Math.sin(elapsed * 0.18 + 0.4) * heroConfig.materials.backdropPulse +
-      membraneFlash * 0.02;
+    responsiveProfile = getHeroResponsiveProfile(width, reducedMotion);
+    renderer.setPixelRatio(getRendererPixelRatio(window.devicePixelRatio, responsiveProfile));
+    renderer.setSize(width, height, false);
 
-    camera.position.x =
-      cameraBase.x + pointer.x * heroConfig.motion.cameraShiftX * interactionStrength * motionScale;
-    camera.position.y =
-      cameraBase.y - pointer.y * heroConfig.motion.cameraShiftY * interactionStrength * motionScale;
-    camera.position.z = cameraBase.z;
-    camera.lookAt(
-      heroConfig.camera.lookAt.x + pointer.x * 0.02 * interactionStrength * motionScale,
-      heroConfig.camera.lookAt.y + pointer.y * 0.024 * interactionStrength * motionScale,
-      heroConfig.camera.lookAt.z,
-    );
+    applyCameraPreset();
+    applyLayout();
 
-    postprocessing.bloomPass.strength =
-      responsiveProfile.bloomStrength + membraneFlash * heroConfig.postprocessing.bloom.flashBoost;
-    postprocessing.finishPass.uniforms.uTime.value = elapsed;
-    postprocessing.finishPass.uniforms.uRgbShift.value =
-      responsiveProfile.rgbShift + membraneFlash * 0.00004;
-    postprocessing.composer.render();
-
-    const calloutWidth = calloutContainer?.clientWidth || container.clientWidth || window.innerWidth;
-    const calloutHeight = calloutContainer?.clientHeight || container.clientHeight || window.innerHeight;
-    calloutOverlay.update({
-      camera,
-      width: calloutWidth,
-      height: calloutHeight,
-    });
-
-    if (!hasPresentedFirstFrame) {
-      hasPresentedFirstFrame = true;
-      container.dataset.ready = "true";
+    if (initialized) {
+      rebuildCycleTimeline();
     }
+  }
 
-    animationFrame = window.requestAnimationFrame(render);
-  };
-
-  const startIntro = () => {
+  function startIntro() {
     introRig.position.set(
       heroConfig.intro.startPosition.x,
       heroConfig.intro.startPosition.y,
@@ -491,18 +372,14 @@ export function createHeroScene({
       heroConfig.intro.startRotation.y,
       heroConfig.intro.startRotation.z,
     );
-    leftCluster.scale.setScalar(heroConfig.intro.stageScale);
-    rightCluster.scale.setScalar(heroConfig.intro.stageScale);
-    membraneController.group.scale.multiplyScalar(0.92);
+    stageRig.scale.setScalar(heroConfig.intro.stageScale);
 
     if (reducedMotion) {
-      introState.progress = 1;
-      introComplete = true;
       introRig.position.set(0, 0, 0);
       introRig.rotation.set(0, 0, 0);
-      leftCluster.scale.setScalar(1);
-      rightCluster.scale.setScalar(1);
-      membraneController.setLayout(layoutPreset.membrane.transform);
+      stageRig.scale.setScalar(1);
+      introState.progress = 1;
+      cycleTimeline?.play(0);
       return;
     }
 
@@ -516,146 +393,141 @@ export function createHeroScene({
       .to(introState, { progress: 1 }, 0)
       .to(introRig.position, { x: 0, y: 0, z: 0 }, 0)
       .to(introRig.rotation, { x: 0, y: 0, z: 0 }, 0)
-      .to(leftCluster.scale, { x: 1, y: 1, z: 1, duration: 1.12 }, 0.16)
-      .to(rightCluster.scale, { x: 1, y: 1, z: 1, duration: 1.12 }, 0.18)
-      .to(
-        membraneController.group.scale,
-        {
-          x: membraneController.baseScale.x,
-          y: membraneController.baseScale.y,
-          z: membraneController.baseScale.z,
-          duration: 1.18,
-        },
-        0.12,
-      );
+      .to(stageRig.scale, { x: 1, y: 1, z: 1, duration: 1.05 }, 0.08);
 
     introTimeline.eventCallback("onComplete", () => {
-      introComplete = true;
-
-      if (slotsInitialized && !isDestroyed) {
-        heroLoopController.start();
-      }
+      cycleTimeline?.play(0);
     });
-  };
+  }
 
-  async function initializeSlots() {
+  function render() {
+    const elapsed = clock.getElapsedTime();
+    const motionScale = responsiveProfile.motionScale;
+    const interactionStrength = responsiveProfile.interactionStrength;
+    const smoothFactor = 0.04 + interactionStrength * 0.016;
+
+    pointer.x += (targetPointer.x - pointer.x) * smoothFactor;
+    pointer.y += (targetPointer.y - pointer.y) * smoothFactor;
+
+    stageRig.position.y =
+      Math.sin(elapsed * heroConfig.motion.stageFloatSpeed) *
+      heroConfig.motion.stageFloatAmplitude *
+      introState.progress *
+      motionScale;
+    stageRig.rotation.y =
+      pointer.x * heroConfig.motion.pointerRotationY * interactionStrength * motionScale +
+      Math.sin(elapsed * 0.16) * heroConfig.motion.stageYawDrift * introState.progress;
+    stageRig.rotation.x =
+      -pointer.y * heroConfig.motion.pointerRotationX * interactionStrength * motionScale;
+    chamberRig.position.x =
+      pointer.x * heroConfig.motion.pointerShiftX * interactionStrength * motionScale;
+    chamberRig.position.y =
+      pointer.y * heroConfig.motion.pointerShiftY * interactionStrength * motionScale;
+
+    camera.position.x =
+      responsiveProfile.camera.position.x +
+      pointer.x * heroConfig.motion.cameraShiftX * interactionStrength * motionScale;
+    camera.position.y =
+      responsiveProfile.camera.position.y -
+      pointer.y * heroConfig.motion.cameraShiftY * interactionStrength * motionScale;
+    camera.lookAt(
+      heroConfig.camera.lookAt.x,
+      heroConfig.camera.lookAt.y,
+      heroConfig.camera.lookAt.z,
+    );
+
+    applySphereState(sphere, materials.sphere, cycleState, translationCurve, elapsed);
+    applyActiveAssetState(getActiveAssetInstance(), cycleState, translationCurve, elapsed);
+    membraneController.update({
+      elapsed,
+      introProgress: introState.progress,
+      pointer,
+      interactionStrength,
+      motionScale,
+      activation: cycleState.membraneActivation,
+      phase: cycleState.membranePhase,
+    });
+
+    renderer.render(scene, camera);
+
+    if (!hasPresentedFirstFrame && initialized) {
+      hasPresentedFirstFrame = true;
+      container.dataset.ready = "true";
+    }
+
+    animationFrame = window.requestAnimationFrame(render);
+  }
+
+  async function initialize() {
     try {
-      await Promise.all(slotControllers.map((slot) => slot.initialize()));
+      const [environmentTexture] = await Promise.all([
+        loadEnvironmentTexture({
+          pmremGenerator,
+          exrLoader,
+        }),
+        Promise.all(
+          curatedHeroAssetKeys.map(async (key, index) => {
+            const instance = await loadHeroAssetInstance(key, {
+              createMaterial: () => createHeroAssetMaterial(heroConfig),
+            });
+
+            instance.group.visible = false;
+            instance.group.userData.phase = index * 0.9;
+            objectRig.add(instance.group);
+            assetInstances.set(key, instance);
+          }),
+        ),
+      ]);
 
       if (isDestroyed) {
+        for (const instance of assetInstances.values()) {
+          disposeHeroAssetInstance(instance);
+        }
+
+        environmentTexture.target?.dispose?.();
+        environmentTexture.fallbackScene?.dispose?.();
         return;
       }
 
-      slotsInitialized = true;
-      await applyClusterPreset(currentPresetIndex, {
-        preferredRustKey: currentLeadAssetKey,
-        restartLoop: false,
-      });
-      preloadAssets(curatedHeroAssetKeys);
+      environmentTarget = environmentTexture.target;
+      environmentFallbackScene = environmentTexture.fallbackScene ?? null;
+      scene.environment = environmentTexture.texture;
 
-      heroLoopController.rebuild();
-
-      if (introComplete) {
-        heroLoopController.start();
-      }
+      syncActiveAssetVisibility();
+      resize();
+      rebuildCycleTimeline();
+      initialized = true;
+      startIntro();
+      preloadAssets(curatedHeroAssetKeys.filter((key) => key !== currentAssetKey));
+      render();
     } catch (error) {
-      console.error("REAL RUST hero slots failed to initialize.", error);
+      console.error("REAL RUST hero failed to initialize.", error);
     }
-  }
-
-  function applyClusterPreset(
-    presetIndex,
-    {
-      preferredRustKey = "",
-      restartLoop = false,
-    } = {},
-  ) {
-    activePresetRequest = activePresetRequest.then(async () => {
-      const nextPreset = getHeroClusterPreset(presetIndex);
-
-      if (!nextPreset || isDestroyed) {
-        return currentLeadAssetKey;
-      }
-
-      const normalizedIndex = heroClusterPresets.findIndex(
-        (preset) => preset.id === nextPreset.id,
-      );
-      const nextPresetIndex = normalizedIndex === -1 ? 0 : normalizedIndex;
-      const rustKeys = rotatePresetKeys(
-        nextPreset.rustAssetKeys,
-        preferredRustKey || currentLeadAssetKey,
-      );
-      const premiumKeys = [...nextPreset.premiumShapeKeys];
-      const presetSeed = nextPresetIndex * 11 + presetCycleCount * 7;
-
-      currentPresetIndex = nextPresetIndex;
-      currentClusterPreset = nextPreset;
-      currentLeadAssetKey = rustKeys[0] ?? currentLeadAssetKey;
-
-      applySceneLayout();
-
-      const assignments = [];
-      const applyToSide = (slots) => {
-        slots.forEach((slot, index) => {
-          slot.setPremiumShapeKey(premiumKeys[index % premiumKeys.length]);
-          slot.setCalloutPreset({
-            calloutPools: nextPreset.calloutPools,
-            presetSeed,
-          });
-          assignments.push(slot.setRustAssetKey(rustKeys[index % rustKeys.length]));
-        });
-      };
-
-      applyToSide(slotControllerMap.left);
-      applyToSide(slotControllerMap.right);
-
-      await Promise.all(assignments);
-
-      if (isDestroyed) {
-        return currentLeadAssetKey;
-      }
-
-      applySceneLayout();
-
-      if (restartLoop && slotsInitialized) {
-        heroLoopController.rebuild();
-
-        if (introComplete) {
-          heroLoopController.start();
-        }
-      }
-
-      return currentLeadAssetKey;
-    });
-
-    return activePresetRequest;
-  }
-
-  function cycleClusterPreset() {
-    if (heroClusterPresets.length <= 1) {
-      return Promise.resolve(currentLeadAssetKey);
-    }
-
-    presetCycleCount += 1;
-    return applyClusterPreset((currentPresetIndex + 1) % heroClusterPresets.length, {
-      restartLoop: false,
-    });
   }
 
   function setAsset(nextAssetKey = defaultHeroAssetKey) {
     const resolvedKey = getHeroAssetSpec(nextAssetKey).key;
-    currentLeadAssetKey = resolvedKey;
-    currentPresetIndex = findHeroClusterPresetIndexForAsset(resolvedKey);
-    currentClusterPreset = getHeroClusterPreset(currentPresetIndex);
+    currentAssetKey = resolvedKey;
+    currentAssetIndex = curatedHeroAssetKeys.indexOf(resolvedKey);
 
-    if (!slotsInitialized) {
-      return Promise.resolve(currentLeadAssetKey);
+    if (currentAssetIndex === -1) {
+      currentAssetIndex = 0;
+      currentAssetKey = curatedHeroAssetKeys[0];
     }
 
-    return applyClusterPreset(currentPresetIndex, {
-      preferredRustKey: resolvedKey,
-      restartLoop: true,
-    });
+    if (!initialized) {
+      return Promise.resolve(currentAssetKey);
+    }
+
+    syncActiveAssetVisibility();
+    cycleTimeline?.pause(0);
+    resetCycleState(cycleState);
+
+    if (reducedMotion || introState.progress >= 1) {
+      cycleTimeline?.play(0);
+    }
+
+    return Promise.resolve(currentAssetKey);
   }
 
   function preloadAssets(keys = []) {
@@ -663,13 +535,11 @@ export function createHeroScene({
       return Promise.resolve([]);
     }
 
-    return Promise.all([preloadHeroAssets(keys), preloadPremiumShapes()]);
+    return preloadHeroAssets(keys);
   }
 
   resize();
-  startIntro();
-  initializeSlots();
-  render();
+  initialize();
 
   if (interactionTarget instanceof EventTarget) {
     interactionTarget.addEventListener("pointermove", handlePointerMove);
@@ -689,19 +559,13 @@ export function createHeroScene({
     setAsset,
     preloadAssets,
     getAssetKey() {
-      return currentLeadAssetKey;
+      return currentAssetKey;
     },
     destroy() {
       isDestroyed = true;
       window.cancelAnimationFrame(animationFrame);
       introTimeline?.kill();
-      if (loopRebuildHandle) {
-        window.clearTimeout(loopRebuildHandle);
-        loopRebuildHandle = 0;
-      }
-      heroLoopController.destroy();
-      membraneController.destroy();
-      calloutOverlay.destroy();
+      cycleTimeline?.kill();
 
       if (interactionTarget instanceof EventTarget) {
         interactionTarget.removeEventListener("pointermove", handlePointerMove);
@@ -714,26 +578,27 @@ export function createHeroScene({
         window.removeEventListener("resize", resize);
       }
 
-      for (const slot of slotControllers) {
-        slot.destroy();
+      for (const instance of assetInstances.values()) {
+        disposeHeroAssetInstance(instance);
       }
 
-      particleSystem.destroy();
+      membraneController.destroy();
       glowTexture.dispose();
-      environmentTarget.dispose();
-      environmentScene.dispose?.();
+      environmentTarget?.dispose?.();
+      environmentFallbackScene?.dispose?.();
       pmremGenerator.dispose();
-      postprocessing.composer.dispose?.();
       clearHeroAssetCache();
-      clearPremiumShapeCache();
+
+      sphere.geometry.dispose();
+      materials.sphere.dispose();
+      materials.rustObject.dispose();
+      materials.membrane.dispose();
+      materials.membraneEdge.dispose();
+      materials.sweepBand.dispose();
 
       scene.traverse((object) => {
         if (object.geometry) {
           object.geometry.dispose();
-        }
-
-        if (object.material) {
-          disposeMaterial(object.material);
         }
       });
 
@@ -744,228 +609,50 @@ export function createHeroScene({
   };
 }
 
-function createSlotControllerMap({
-  layoutPreset,
-  clusterPreset,
-  leadAssetKey,
-  slotConfig,
-  materials,
-  createMaterial,
-}) {
-  const rustKeys = rotatePresetKeys(
-    clusterPreset?.rustAssetKeys ?? curatedHeroAssetKeys.slice(0, 2),
-    leadAssetKey,
+function createSphereMesh(material, config) {
+  const geometry = new THREE.SphereGeometry(
+    config.radius,
+    config.widthSegments,
+    config.heightSegments,
   );
-  const premiumKeys = clusterPreset?.premiumShapeKeys ?? ["facetOblong", "capsuleBar"];
-  const leftLayouts = layoutPreset.clusters.left.slots;
-  const rightLayouts = layoutPreset.clusters.right.slots;
+  geometry.computeVertexNormals();
 
-  const left = leftLayouts.map(
-    (layout, index) =>
-      new SlotController({
-        name: layout.name,
-        side: "left",
-        orderIndex: index,
-        premiumShapeKey: premiumKeys[index % premiumKeys.length] ?? layout.premiumShapeKey,
-        rustAssetKey: rustKeys[index % rustKeys.length],
-        config: slotConfig,
-        materials,
-        createMaterial,
-      }),
-  );
-
-  const right = rightLayouts.map(
-    (layout, index) =>
-      new SlotController({
-        name: layout.name,
-        side: "right",
-        orderIndex: index + leftLayouts.length,
-        premiumShapeKey: premiumKeys[index % premiumKeys.length] ?? layout.premiumShapeKey,
-        rustAssetKey: rustKeys[index % rustKeys.length],
-        config: slotConfig,
-        materials,
-        createMaterial,
-      }),
-  );
-
-  return {
-    left,
-    right,
-    all: [...left, ...right],
-  };
+  const mesh = new THREE.Mesh(geometry, material);
+  mesh.name = "chromeSphere";
+  mesh.renderOrder = 2;
+  return mesh;
 }
 
-function applyLayoutPreset({
-  layoutPreset,
-  responsiveProfile,
-  membraneController,
-  atmosphere,
-  clusters,
-  clusterBase,
-  slotControllerMap,
-  heroLoopController,
-  clusterPreset,
-}) {
-  membraneController.setLayout(layoutPreset.membrane.transform);
-  applyAtmospherePreset(atmosphere, layoutPreset.atmosphere);
+async function loadEnvironmentTexture({ pmremGenerator, exrLoader }) {
+  pmremGenerator.compileEquirectangularShader();
 
-  applyClusterLayout(clusters.leftCluster, clusterBase.left, layoutPreset.clusters.left);
-  applyClusterLayout(clusters.rightCluster, clusterBase.right, layoutPreset.clusters.right);
+  try {
+    const exrTexture = await exrLoader.loadAsync(ferndaleStudioHdriUrl);
+    exrTexture.mapping = THREE.EquirectangularReflectionMapping;
 
-  for (const [index, slot] of slotControllerMap.left.entries()) {
-    slot.setLayout(
-      layoutPreset.clusters.left.slots[index],
-      index < responsiveProfile.slotsPerSide,
-      getPresetSlotVariation(clusterPreset, "left", layoutPreset.clusters.left.slots[index]?.name),
+    const target = pmremGenerator.fromEquirectangular(exrTexture);
+    exrTexture.dispose();
+
+    return {
+      texture: target.texture,
+      target,
+      fallbackScene: null,
+    };
+  } catch (error) {
+    console.warn(
+      "REAL RUST hero could not load ferndale_studio_06_4k.exr. Falling back to RoomEnvironment.",
+      error,
     );
+
+    const fallbackScene = new RoomEnvironment();
+    const target = pmremGenerator.fromScene(fallbackScene, 0.04);
+
+    return {
+      texture: target.texture,
+      target,
+      fallbackScene,
+    };
   }
-
-  for (const [index, slot] of slotControllerMap.right.entries()) {
-    slot.setLayout(
-      layoutPreset.clusters.right.slots[index],
-      index < responsiveProfile.slotsPerSide,
-      getPresetSlotVariation(clusterPreset, "right", layoutPreset.clusters.right.slots[index]?.name),
-    );
-  }
-
-  heroLoopController.configure({
-    membraneBaseX: layoutPreset.membrane.transform.position.x,
-    passDuration: responsiveProfile.passDuration,
-    holdDuration: responsiveProfile.holdDuration,
-    calloutsEnabled: responsiveProfile.calloutsEnabled,
-    travelX: responsiveProfile.travelX,
-  });
-}
-
-function applyClusterLayout(group, baseStore, layout) {
-  baseStore.position.set(layout.position.x, layout.position.y, layout.position.z);
-  baseStore.rotation.set(layout.rotation.x, layout.rotation.y, layout.rotation.z);
-  group.position.copy(baseStore.position);
-  group.rotation.copy(baseStore.rotation);
-}
-
-function getPresetSlotVariation(preset, side, slotName) {
-  return preset?.slotVariations?.[side]?.[slotName] ?? null;
-}
-
-function updateClusterGroup(group, baseStore, {
-  elapsed,
-  pointer,
-  interactionStrength,
-  atmosphereStrength,
-  parallaxDirection,
-  motionScale = 1,
-}) {
-  group.position.x =
-    baseStore.position.x +
-    pointer.x *
-      heroConfig.motion.clusterParallaxX *
-      interactionStrength *
-      parallaxDirection *
-      motionScale;
-  group.position.y =
-    baseStore.position.y -
-    pointer.y * heroConfig.motion.clusterParallaxY * interactionStrength * motionScale +
-    Math.sin(elapsed * 0.14 + parallaxDirection) * 0.03 * atmosphereStrength * motionScale;
-  group.position.z = baseStore.position.z;
-  group.rotation.x = baseStore.rotation.x;
-  group.rotation.y =
-    baseStore.rotation.y + pointer.x * 0.02 * interactionStrength * parallaxDirection * motionScale;
-  group.rotation.z = baseStore.rotation.z;
-}
-
-function createAtmosphere({ glowTexture, materials }) {
-  const backdrop = new THREE.Mesh(new THREE.PlaneGeometry(15.2, 11.1), materials.backdrop);
-  const coolZone = createGlowSprite(glowTexture, heroConfig.palette.cool, 0.24);
-  const warmZone = createGlowSprite(glowTexture, heroConfig.palette.warm, 0.18);
-  const neutralZone = createGlowSprite(glowTexture, heroConfig.palette.lightWarm, 0.07);
-
-  return {
-    backdrop,
-    coolZone,
-    warmZone,
-    neutralZone,
-    base: {
-      backdropPosition: new THREE.Vector3(),
-      backdropScale: new THREE.Vector3(1, 1, 1),
-      coolPosition: new THREE.Vector3(),
-      coolScale: new THREE.Vector3(1, 1, 1),
-      warmPosition: new THREE.Vector3(),
-      warmScale: new THREE.Vector3(1, 1, 1),
-      neutralPosition: new THREE.Vector3(),
-      neutralScale: new THREE.Vector3(1, 1, 1),
-    },
-  };
-}
-
-function applyAtmospherePreset(atmosphere, preset) {
-  atmosphere.base.backdropPosition.set(
-    preset.backdrop.position.x,
-    preset.backdrop.position.y,
-    preset.backdrop.position.z,
-  );
-  atmosphere.base.backdropScale.set(
-    preset.backdrop.scale.x,
-    preset.backdrop.scale.y,
-    preset.backdrop.scale.z,
-  );
-  atmosphere.backdrop.position.copy(atmosphere.base.backdropPosition);
-  atmosphere.backdrop.scale.copy(atmosphere.base.backdropScale);
-
-  atmosphere.base.coolPosition.set(preset.cool.position.x, preset.cool.position.y, preset.cool.position.z);
-  atmosphere.base.coolScale.set(preset.cool.scale.x, preset.cool.scale.y, preset.cool.scale.z);
-  atmosphere.coolZone.position.copy(atmosphere.base.coolPosition);
-  atmosphere.coolZone.scale.copy(atmosphere.base.coolScale);
-
-  atmosphere.base.warmPosition.set(preset.warm.position.x, preset.warm.position.y, preset.warm.position.z);
-  atmosphere.base.warmScale.set(preset.warm.scale.x, preset.warm.scale.y, preset.warm.scale.z);
-  atmosphere.warmZone.position.copy(atmosphere.base.warmPosition);
-  atmosphere.warmZone.scale.copy(atmosphere.base.warmScale);
-
-  atmosphere.base.neutralPosition.set(
-    preset.neutral.position.x,
-    preset.neutral.position.y,
-    preset.neutral.position.z,
-  );
-  atmosphere.base.neutralScale.set(preset.neutral.scale.x, preset.neutral.scale.y, preset.neutral.scale.z);
-  atmosphere.neutralZone.position.copy(atmosphere.base.neutralPosition);
-  atmosphere.neutralZone.scale.copy(atmosphere.base.neutralScale);
-}
-
-function updateAtmosphere(atmosphere, {
-  elapsed,
-  pointer,
-  interactionStrength,
-  atmosphereStrength,
-  motionScale = 1,
-}) {
-  atmosphere.backdrop.position.x =
-    atmosphere.base.backdropPosition.x + pointer.x * 0.035 * interactionStrength * motionScale;
-  atmosphere.backdrop.position.y =
-    atmosphere.base.backdropPosition.y - pointer.y * 0.025 * interactionStrength * motionScale;
-  atmosphere.backdrop.scale.x =
-    atmosphere.base.backdropScale.x * (1 + Math.sin(elapsed * 0.09 + 0.4) * 0.01 * atmosphereStrength);
-  atmosphere.backdrop.scale.y =
-    atmosphere.base.backdropScale.y * (1 + Math.cos(elapsed * 0.11 + 0.8) * 0.014 * atmosphereStrength);
-
-  atmosphere.coolZone.position.x =
-    atmosphere.base.coolPosition.x -
-    pointer.x * heroConfig.motion.glowParallaxX * interactionStrength * motionScale +
-    Math.sin(elapsed * 0.16) * 0.09 * atmosphereStrength;
-  atmosphere.coolZone.position.y =
-    atmosphere.base.coolPosition.y + Math.cos(elapsed * 0.14 + 0.8) * 0.07 * atmosphereStrength;
-
-  atmosphere.warmZone.position.x =
-    atmosphere.base.warmPosition.x +
-    pointer.x * heroConfig.motion.glowParallaxX * 0.82 * interactionStrength * motionScale +
-    Math.sin(elapsed * 0.12 + 1.7) * 0.06 * atmosphereStrength;
-  atmosphere.warmZone.position.y =
-    atmosphere.base.warmPosition.y + Math.cos(elapsed * 0.18 + 2.2) * 0.05 * atmosphereStrength;
-
-  atmosphere.neutralZone.position.x =
-    atmosphere.base.neutralPosition.x + Math.sin(elapsed * 0.1 + 0.3) * 0.04 * atmosphereStrength;
-  atmosphere.neutralZone.position.y =
-    atmosphere.base.neutralPosition.y + Math.cos(elapsed * 0.13 + 0.9) * 0.035 * atmosphereStrength;
 }
 
 function createLights(target, lightsConfig) {
@@ -982,16 +669,27 @@ function createLights(target, lightsConfig) {
   );
   target.add(hemisphereLight);
 
-  const coolKeyLight = new THREE.DirectionalLight(
-    lightsConfig.coolKey.color,
-    lightsConfig.coolKey.intensity,
+  const keyLight = new THREE.DirectionalLight(
+    lightsConfig.key.color,
+    lightsConfig.key.intensity,
   );
-  coolKeyLight.position.set(
-    lightsConfig.coolKey.position.x,
-    lightsConfig.coolKey.position.y,
-    lightsConfig.coolKey.position.z,
+  keyLight.position.set(
+    lightsConfig.key.position.x,
+    lightsConfig.key.position.y,
+    lightsConfig.key.position.z,
   );
-  target.add(coolKeyLight);
+  target.add(keyLight);
+
+  const rimLight = new THREE.DirectionalLight(
+    lightsConfig.rim.color,
+    lightsConfig.rim.intensity,
+  );
+  rimLight.position.set(
+    lightsConfig.rim.position.x,
+    lightsConfig.rim.position.y,
+    lightsConfig.rim.position.z,
+  );
+  target.add(rimLight);
 
   const membraneAccentLight = new THREE.PointLight(
     lightsConfig.membraneAccent.color,
@@ -1005,110 +703,6 @@ function createLights(target, lightsConfig) {
     lightsConfig.membraneAccent.position.z,
   );
   target.add(membraneAccentLight);
-}
-
-function createDustField({
-  material,
-  responsiveProfile,
-  particlesConfig,
-}) {
-  const group = new THREE.Group();
-  group.name = "conversionDust";
-
-  const layers = (particlesConfig.layers ?? []).map((layerConfig, index) =>
-    createDustLayer({
-      baseMaterial: material,
-      count: Math.max(4, Math.round(responsiveProfile.dustCount * layerConfig.density)),
-      layerConfig,
-      layerIndex: index,
-    }),
-  );
-
-  for (const layer of layers) {
-    group.add(layer.points);
-  }
-
-  return {
-    group,
-    layers,
-    viewportKey: responsiveProfile.viewportKey,
-    count: responsiveProfile.dustCount,
-    destroy() {
-      for (const layer of layers) {
-        layer.points.geometry?.dispose();
-        layer.points.material?.dispose?.();
-      }
-
-      group.removeFromParent();
-    },
-  };
-}
-
-function createDustLayer({
-  baseMaterial,
-  count,
-  layerConfig,
-  layerIndex,
-}) {
-  const geometry = new THREE.BufferGeometry();
-  const positions = new Float32Array(count * 3);
-  const random = createSeededRandom((layerConfig.seed ?? layerIndex + 1) * 97);
-
-  for (let index = 0; index < count; index += 1) {
-    const stride = index * 3;
-    const angle = random() * Math.PI * 2;
-    const radius = Math.pow(random(), 1.2) * layerConfig.radius;
-    const height = (random() - 0.5) * layerConfig.height;
-    const depth = layerConfig.depthOffset + (random() - 0.5) * layerConfig.depthSpread;
-
-    positions[stride] = Math.cos(angle) * radius;
-    positions[stride + 1] = height;
-    positions[stride + 2] = Math.sin(angle) * radius + depth;
-  }
-
-  geometry.setAttribute("position", new THREE.BufferAttribute(positions, 3));
-
-  const pointsMaterial = baseMaterial.clone();
-  pointsMaterial.size *= layerConfig.sizeScale;
-  pointsMaterial.opacity *= layerConfig.opacityScale;
-
-  const points = new THREE.Points(geometry, pointsMaterial);
-  points.renderOrder = 0;
-
-  return {
-    points,
-    config: layerConfig,
-    phase: random() * Math.PI * 2,
-  };
-}
-
-function updateDustField(field, {
-  elapsed,
-  pointer,
-  interactionStrength,
-  atmosphereStrength,
-  motionScale = 1,
-}) {
-  field.group.rotation.y = elapsed * heroConfig.particles.rotationYSpeed * motionScale;
-  field.group.rotation.x =
-    Math.sin(elapsed * 0.1) * heroConfig.particles.rotationXSwing * motionScale;
-  field.group.rotation.z =
-    Math.cos(elapsed * 0.08 + 0.4) * heroConfig.particles.rotationZSwing * motionScale;
-
-  for (const layer of field.layers) {
-    layer.points.rotation.y = elapsed * layer.config.rotationYSpeed * motionScale;
-    layer.points.position.x =
-      -pointer.x * layer.config.pointerParallax * interactionStrength * motionScale +
-      Math.sin(elapsed * layer.config.driftSpeed + layer.phase) *
-        layer.config.driftX *
-        atmosphereStrength *
-        motionScale;
-    layer.points.position.y =
-      Math.cos(elapsed * layer.config.bobSpeed + layer.phase) *
-      layer.config.driftY *
-      atmosphereStrength *
-      motionScale;
-  }
 }
 
 function createGlowTexture() {
@@ -1131,130 +725,171 @@ function createGlowTexture() {
     size * 0.5,
     size * 0.5,
   );
-
   gradient.addColorStop(0, "rgba(255,255,255,1)");
   gradient.addColorStop(0.22, "rgba(255,255,255,0.42)");
-  gradient.addColorStop(0.55, "rgba(255,255,255,0.08)");
+  gradient.addColorStop(0.56, "rgba(255,255,255,0.08)");
   gradient.addColorStop(1, "rgba(255,255,255,0)");
-
   context.fillStyle = gradient;
   context.fillRect(0, 0, size, size);
 
   const texture = new THREE.CanvasTexture(canvas);
-  texture.colorSpace = THREE.SRGBColorSpace;
+  texture.colorSpace = THREE.NoColorSpace;
   texture.needsUpdate = true;
   return texture;
 }
 
-function createGlowSprite(texture, color, opacity) {
-  const material = new THREE.SpriteMaterial({
-    map: texture,
-    color,
-    transparent: true,
-    opacity,
-    blending: THREE.AdditiveBlending,
-    depthWrite: false,
-    toneMapped: false,
-  });
+function applySphereState(sphere, material, cycleState, translationCurve, elapsed) {
+  const progress = THREE.MathUtils.clamp(cycleState.sphereProgress, 0, 1);
+  const point = translationCurve.getPointAt(progress);
+  const tangent = translationCurve.getTangentAt(progress);
+  const stagingInfluence = 1 - smoothstep(progress / 0.2);
+  const idleOffset =
+    Math.sin(elapsed * heroConfig.sphere.idleFloatSpeed) *
+    heroConfig.sphere.idleFloatAmplitude *
+    cycleState.sphereOpacity;
+  const driftX = Math.sin(elapsed * 0.48 + 0.2) * 0.04 * stagingInfluence;
+  const driftZ = Math.cos(elapsed * 0.36 + 0.9) * 0.025 * stagingInfluence;
 
-  return new THREE.Sprite(material);
-}
-
-function createPostProcessing({ renderer, scene, camera, width, height, responsiveProfile }) {
-  const composer = new EffectComposer(renderer);
-  composer.setPixelRatio?.(getRendererPixelRatio(window.devicePixelRatio, responsiveProfile));
-  composer.setSize(width, height);
-
-  const renderPass = new RenderPass(scene, camera);
-  const bloomPass = new UnrealBloomPass(
-    new THREE.Vector2(width, height),
-    responsiveProfile.bloomStrength,
-    responsiveProfile.bloomRadius,
-    responsiveProfile.bloomThreshold,
+  sphere.position.set(
+    point.x + driftX + tangent.x * 0.02,
+    point.y + idleOffset,
+    point.z + driftZ,
   );
-  const finishPass = new ShaderPass({
-    uniforms: {
-      tDiffuse: { value: null },
-      uTime: { value: 0 },
-      uRgbShift: { value: responsiveProfile.rgbShift },
-      uVignette: { value: responsiveProfile.vignette },
-      uGrain: { value: responsiveProfile.grain },
-    },
-    vertexShader: `
-      varying vec2 vUv;
-
-      void main() {
-        vUv = uv;
-        gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
-      }
-    `,
-    fragmentShader: `
-      uniform sampler2D tDiffuse;
-      uniform float uTime;
-      uniform float uRgbShift;
-      uniform float uVignette;
-      uniform float uGrain;
-      varying vec2 vUv;
-
-      float random(vec2 seed) {
-        return fract(sin(dot(seed, vec2(12.9898, 78.233))) * 43758.5453123);
-      }
-
-      void main() {
-        vec2 centered = vUv - 0.5;
-        float edgeBias = smoothstep(0.12, 0.82, length(centered) * 1.55);
-        vec2 shift = centered * uRgbShift * edgeBias;
-
-        vec4 base = texture2D(tDiffuse, vUv);
-        vec4 red = texture2D(tDiffuse, vUv + shift);
-        vec4 blue = texture2D(tDiffuse, vUv - shift);
-
-        vec3 color = vec3(red.r, base.g, blue.b);
-        float vignette = smoothstep(0.06, 0.88, dot(centered, centered) * 3.2);
-        float grain = (random(vUv * vec2(921.47, 471.82) + uTime * 0.05) - 0.5) * (0.55 + vignette * 0.45);
-
-        color *= 1.0 - vignette * uVignette;
-        color += grain * uGrain;
-
-        gl_FragColor = vec4(color, base.a);
-      }
-    `,
-  });
-  const outputPass = new OutputPass();
-
-  composer.addPass(renderPass);
-  composer.addPass(bloomPass);
-  composer.addPass(finishPass);
-  composer.addPass(outputPass);
-
-  return {
-    composer,
-    bloomPass,
-    finishPass,
-  };
+  sphere.scale.setScalar(cycleState.sphereScale);
+  material.opacity = cycleState.sphereOpacity;
+  material.transparent = cycleState.sphereOpacity < 0.999;
+  sphere.visible = cycleState.sphereOpacity > 0.002;
 }
 
-function getRendererPixelRatio(devicePixelRatio, responsiveProfile) {
-  return Math.min(devicePixelRatio, responsiveProfile.pixelRatioCap);
-}
-
-function createSeededRandom(seed) {
-  let value = seed >>> 0;
-
-  return () => {
-    value = (value * 1664525 + 1013904223) >>> 0;
-    return value / 4294967296;
-  };
-}
-
-function disposeMaterial(material) {
-  if (Array.isArray(material)) {
-    for (const entry of material) {
-      disposeMaterial(entry);
-    }
-
+function applyActiveAssetState(instance, cycleState, translationCurve, elapsed) {
+  if (!instance) {
     return;
   }
 
-  material.dispose();
+  const reveal = smoothstep(cycleState.objectOpacity);
+  const progress = THREE.MathUtils.clamp(cycleState.objectProgress, 0, 1);
+  const point = translationCurve.getPointAt(progress);
+  const tangent = translationCurve.getTangentAt(progress);
+  const wobblePhase = instance.group.userData.phase ?? 0;
+  const idleLift =
+    Math.sin(elapsed * instance.spec.wobbleSpeed + wobblePhase) *
+    instance.spec.wobbleAmount *
+    reveal;
+  const pathYaw = THREE.MathUtils.clamp(Math.atan2(tangent.x, tangent.z) * 0.22, -0.2, 0.2);
+  const pathPitch = THREE.MathUtils.clamp(
+    -Math.atan2(tangent.y, Math.hypot(tangent.x, tangent.z)) * 0.4,
+    -0.12,
+    0.12,
+  );
+
+  instance.group.visible = cycleState.objectOpacity > 0.002;
+  instance.group.position.set(
+    point.x + (instance.spec.position?.x ?? 0),
+    point.y + (instance.spec.position?.y ?? 0) + idleLift,
+    point.z + (instance.spec.position?.z ?? 0),
+  );
+  instance.group.rotation.set(
+    (instance.spec.displayRotation?.x ?? 0) + pathPitch - (1 - reveal) * 0.18,
+    (instance.spec.displayRotation?.y ?? 0) + pathYaw - (1 - reveal) * 0.24,
+    (instance.spec.displayRotation?.z ?? 0) +
+      Math.sin(elapsed * 0.26 + wobblePhase) * 0.03 * reveal,
+  );
+  instance.group.scale.setScalar(cycleState.objectScale);
+
+  if (instance.material) {
+    instance.material.opacity = cycleState.objectOpacity;
+    instance.material.transparent = cycleState.objectOpacity < 0.999;
+  }
+}
+
+function createCycleState() {
+  return {
+    sphereProgress: 0.025,
+    sphereScale: 1,
+    sphereOpacity: 1,
+    objectProgress: 0.61,
+    objectScale: 0.82,
+    objectOpacity: 0,
+    membraneActivation: 0.04,
+    membranePhase: 0,
+  };
+}
+
+function getCycleResetState() {
+  return {
+    sphereProgress: 0.025,
+    sphereScale: 1,
+    sphereOpacity: 1,
+    objectProgress: 0.61,
+    objectScale: 0.82,
+    objectOpacity: 0,
+    membraneActivation: 0.04,
+    membranePhase: 0,
+  };
+}
+
+function resetCycleState(cycleState) {
+  Object.assign(cycleState, getCycleResetState());
+}
+
+function smoothstep(value) {
+  const clamped = THREE.MathUtils.clamp(value, 0, 1);
+  return clamped * clamped * (3 - 2 * clamped);
+}
+
+function getRendererPixelRatio(devicePixelRatio, responsiveProfile) {
+  return Math.min(devicePixelRatio || 1, responsiveProfile.pixelRatioCap);
+}
+
+function createTranslationCurve(chamberProfile) {
+  const exitPoint = vectorFromCoords(
+    chamberProfile.object.exitX,
+    chamberProfile.object.exitY ?? chamberProfile.object.holdY - 0.16,
+    chamberProfile.object.exitZ ?? chamberProfile.object.holdZ - 0.34,
+  );
+  const curve = new THREE.CatmullRomCurve3([
+    vectorFromCoords(
+      chamberProfile.sphere.startX,
+      chamberProfile.sphere.startY,
+      chamberProfile.sphere.startZ,
+    ),
+    vectorFromCoords(
+      chamberProfile.sphere.nearX,
+      chamberProfile.sphere.nearY,
+      chamberProfile.sphere.nearZ,
+    ),
+    vectorFromCoords(
+      chamberProfile.sphere.crossX,
+      chamberProfile.sphere.crossY,
+      chamberProfile.sphere.crossZ,
+    ),
+    vectorFromCoords(
+      chamberProfile.sphere.hiddenX,
+      chamberProfile.sphere.hiddenY,
+      chamberProfile.sphere.hiddenZ,
+    ),
+    vectorFromCoords(
+      chamberProfile.object.startX,
+      chamberProfile.object.startY,
+      chamberProfile.object.startZ,
+    ),
+    vectorFromCoords(
+      chamberProfile.object.restX,
+      chamberProfile.object.restY,
+      chamberProfile.object.restZ,
+    ),
+    vectorFromCoords(
+      chamberProfile.object.holdX,
+      chamberProfile.object.holdY,
+      chamberProfile.object.holdZ,
+    ),
+    exitPoint,
+  ]);
+  curve.curveType = "centripetal";
+  curve.closed = false;
+  return curve;
+}
+
+function vectorFromCoords(x, y, z) {
+  return new THREE.Vector3(x, y, z);
 }

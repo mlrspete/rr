@@ -27,6 +27,7 @@ export async function loadHeroAssetInstance(key, { createMaterial } = {}) {
 
     child.castShadow = false;
     child.receiveShadow = false;
+    child.renderOrder = 2;
   });
 
   return {
@@ -118,24 +119,31 @@ async function getOrLoadAssetTemplate(spec) {
 }
 
 async function buildAssetTemplate(spec) {
-  const sourceUrl = resolveHeroAssetRuntimeUrl(spec);
-
-  let object;
-
-  try {
-    object = await objLoader.loadAsync(sourceUrl);
-  } catch (error) {
-    throw new Error(`Failed to load hero asset "${spec.key}" from ${sourceUrl}`, {
-      cause: error,
-    });
-  }
+  const objects = await Promise.all(
+    (spec.sourceUrls ?? []).map(async (sourceUrl) => {
+      try {
+        return await objLoader.loadAsync(sourceUrl);
+      } catch (error) {
+        throw new Error(`Failed to load hero asset "${spec.key}" from ${sourceUrl}`, {
+          cause: error,
+        });
+      }
+    }),
+  );
 
   const root = new THREE.Group();
   const normalized = new THREE.Group();
+  const assembly = new THREE.Group();
 
   normalized.name = `${spec.key}-normalized`;
   root.name = `${spec.key}-template`;
-  normalized.add(object);
+  assembly.name = `${spec.key}-assembly`;
+
+  for (const object of objects) {
+    assembly.add(object);
+  }
+
+  normalized.add(assembly);
   root.add(normalized);
 
   normalized.rotation.set(
@@ -144,12 +152,17 @@ async function buildAssetTemplate(spec) {
     spec.normalizeRotation?.z ?? 0,
   );
 
-  object.traverse((child) => {
+  root.updateMatrixWorld(true);
+
+  assembly.traverse((child) => {
     if (!child.isMesh) {
       return;
     }
 
+    child.geometry.deleteAttribute("normal");
     child.geometry.computeVertexNormals();
+    child.geometry.normalizeNormals();
+
     child.geometry.computeBoundingBox();
     child.geometry.computeBoundingSphere();
   });
@@ -170,27 +183,15 @@ async function buildAssetTemplate(spec) {
     centeredSize.z,
     Number.EPSILON,
   );
-  const uniformScale = (spec.targetExtent ?? 2.25) / referenceExtent;
+  const uniformScale = (spec.targetExtent ?? 1.8) / referenceExtent;
   normalized.scale.setScalar(uniformScale);
 
   root.updateMatrixWorld(true);
 
-  const finalBounds = new THREE.Box3().setFromObject(root);
-
   return {
     root,
-    bounds: extractBounds(finalBounds),
+    bounds: extractBounds(new THREE.Box3().setFromObject(root)),
   };
-}
-
-function resolveHeroAssetRuntimeUrl(spec) {
-  const relativePath = `${spec.runtimePath ?? spec.source ?? ""}`.replace(/^\/+/, "");
-  const baseUrl =
-    typeof document !== "undefined"
-      ? new URL(import.meta.env.BASE_URL, document.baseURI)
-      : new URL(import.meta.env.BASE_URL, "http://localhost/");
-
-  return new URL(relativePath, baseUrl).href;
 }
 
 function extractBounds(box) {

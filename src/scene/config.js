@@ -1,6 +1,6 @@
 export const heroConfig = {
   renderer: {
-    exposure: 0.99,
+    exposure: 1.01,
   },
   quality: {
     laptopBreakpoint: 1440,
@@ -9,661 +9,392 @@ export const heroConfig = {
   },
   responsive: {
     desktop: {
-      slotsPerSide: 2,
-      pixelRatioCap: 1.65,
+      pixelRatioCap: 1.7,
     },
     laptop: {
-      slotsPerSide: 2,
       pixelRatioCap: 1.55,
     },
     tablet: {
-      slotsPerSide: 2,
       pixelRatioCap: 1.3,
     },
     mobile: {
-      slotsPerSide: 1,
       pixelRatioCap: 1,
     },
   },
   palette: {
-    background: "#090507",
-    fog: "#090507",
-    plum: "#1a0b14",
-    metal: "#b5afb7",
-    warm: "#c98a66",
-    cool: "#6682b8",
-    lightWarm: "#f2e7dc",
-    ember: "#6c3b28",
+    background: "#050507",
+    fog: "#07080b",
+    chrome: "#eef2f7",
+    silver: "#d8dee7",
+    cool: "#6d85b3",
+    coolEdge: "#b8d1ff",
+    graphite: "#4c555f",
+    graphiteSpecular: "#b8c4d2",
+    graphiteEmissive: "#181d24",
+    warm: "#8f7460",
   },
   camera: {
     desktop: {
-      fov: 37,
-      position: { x: 0.04, y: 0.18, z: 8.9 },
+      fov: 35,
+      position: { x: 0.06, y: 0.08, z: 7.15 },
+    },
+    laptop: {
+      fov: 38,
+      position: { x: 0.05, y: 0.08, z: 7.65 },
     },
     tablet: {
       fov: 42,
-      position: { x: 0.03, y: 0.16, z: 9.7 },
+      position: { x: 0.04, y: 0.08, z: 8.35 },
     },
     mobile: {
-      fov: 48,
-      position: { x: 0.02, y: 0.14, z: 10.6 },
+      fov: 47,
+      position: { x: 0.02, y: 0.06, z: 9.1 },
     },
-    lookAt: { x: 0.06, y: -0.16, z: 0.08 },
+    lookAt: { x: 0.1, y: -0.18, z: 0.05 },
   },
   intro: {
-    duration: 1.7,
+    duration: 1.5,
     ease: "power3.out",
-    startPosition: { x: 0, y: -0.18, z: 1.3 },
-    startRotation: { x: 0.04, y: -0.08, z: -0.01 },
+    startPosition: { x: 0, y: -0.14, z: 0.9 },
+    startRotation: { x: 0.05, y: -0.08, z: -0.01 },
     stageScale: 0.97,
+  },
+  sphere: {
+    radius: 0.58,
+    widthSegments: 192,
+    heightSegments: 144,
+    idleFloatAmplitude: 0.03,
+    idleFloatSpeed: 0.7,
+  },
+  rustObject: {
+    idleFloatAmplitude: 0.025,
+    idleFloatSpeed: 0.52,
+    material: {
+      color: "#4c555f",
+      emissive: "#181d24",
+      emissiveIntensity: 0.02,
+      metalness: 0.22,
+      roughness: 0.38,
+      clearcoat: 0.46,
+      clearcoatRoughness: 0.2,
+      sheen: 0.06,
+      sheenColor: "#8f9db0",
+      sheenRoughness: 0.46,
+      specularIntensity: 0.88,
+      specularColor: "#b8c4d2",
+      ior: 1.42,
+      envMapIntensity: 1.28,
+      side: "double",
+    },
   },
   membrane: {
     geometry: {
       body: {
-        radiusX: 1.22,
-        radiusY: 1.94,
-        depth: 0.3,
-        bevelSize: 0.055,
-        bevelThickness: 0.082,
-        exponent: 3.2,
-        shoulderPinch: 0.09,
-        points: 84,
+        radiusX: 1.14,
+        radiusY: 1.84,
+        depth: 0.34,
+        bevelSize: 0.05,
+        bevelThickness: 0.08,
+        exponent: 3.08,
+        shoulderPinch: 0.08,
+        points: 88,
       },
       rim: {
-        radiusX: 1.33,
-        radiusY: 2.06,
-        frame: 0.1,
-        depth: 0.07,
-        exponent: 3.18,
-        shoulderPinch: 0.075,
-        points: 84,
+        radiusX: 1.24,
+        radiusY: 1.96,
+        frame: 0.08,
+        depth: 0.08,
+        exponent: 3.06,
+        shoulderPinch: 0.068,
+        points: 88,
       },
       sweepBand: {
-        width: 0.66,
-        height: 3.74,
-        radius: 0.24,
+        width: 0.56,
+        height: 2.96,
+        radius: 0.28,
       },
       halo: {
-        offsetX: 0.16,
-        offsetY: 0.04,
-        offsetZ: -0.82,
-        scaleX: 4.6,
-        scaleY: 6.5,
+        offsetX: 0.04,
+        offsetY: 0.02,
+        offsetZ: -0.72,
+        scaleX: 4.1,
+        scaleY: 5.9,
+      },
+      conversionVeil: {
+        width: 0.92,
+        height: 2.56,
+        radius: 0.34,
+        offsetX: 0.18,
+        offsetY: 0.01,
+        offsetZ: 0.26,
+        travelX: 0.08,
+      },
+      conversionPulse: {
+        width: 0.74,
+        height: 2.18,
+        radius: 0.3,
+        offsetX: 0.08,
+        offsetY: 0.01,
+        offsetZ: 0.34,
+        travelX: 0.12,
       },
     },
     appearance: {
-      bodyColor: "#f0e8e0",
-      rimColor: "#d7cfc7",
-      emissive: "#58667f",
-      rimEmissive: "#5f4336",
-      transmission: 0.96,
-      thickness: 3.92,
-      ior: 1.24,
-      attenuationDistance: 1.34,
-      attenuationColor: "#261b24",
-      metalness: 0.02,
-      roughness: 0.038,
+      bodyColor: "#b9c6da",
+      rimColor: "#c7d5ea",
+      emissive: "#4f678f",
+      rimEmissive: "#5e7fb3",
+      transmission: 0.92,
+      thickness: 2.6,
+      ior: 1.32,
+      attenuationDistance: 0.82,
+      attenuationColor: "#131923",
+      metalness: 0.08,
+      roughness: 0.18,
       clearcoat: 1,
-      clearcoatRoughness: 0.018,
-      iridescence: 0.05,
-      iridescenceIOR: 1.17,
-      iridescenceThicknessRange: [160, 420],
+      clearcoatRoughness: 0.14,
       specularIntensity: 1,
-      opacity: 0.97,
-      envMapIntensity: 1.58,
-      emissiveIntensity: 0.006,
-      rimMetalness: 0.78,
-      rimRoughness: 0.14,
+      opacity: 0.94,
+      envMapIntensity: 1.28,
+      emissiveIntensity: 0.008,
+      rimMetalness: 0.34,
+      rimRoughness: 0.2,
       rimClearcoat: 1,
-      rimClearcoatRoughness: 0.04,
-      rimOpacity: 0.44,
-      rimEnvMapIntensity: 1.58,
-      rimEmissiveIntensity: 0.012,
+      rimClearcoatRoughness: 0.14,
+      rimOpacity: 0.42,
+      rimEnvMapIntensity: 1.34,
+      rimEmissiveIntensity: 0.014,
     },
     motion: {
-      pointerYaw: 0.012,
-      pointerPitch: 0.009,
-      sweepYaw: 0.062,
-      sweepPitch: 0.018,
-      sweepRoll: 0.024,
-      verticalDrift: 0.018,
-      depthDrift: 0.03,
-      bandTravelX: 0.13,
-      bandTravelY: 0.032,
-      bandBob: 0.018,
-      haloDriftX: 0.028,
-      haloDriftY: 0.034,
+      pointerYaw: 0.018,
+      pointerPitch: 0.014,
+      phaseYaw: 0.02,
+      verticalDrift: 0.01,
+      bandTravelX: 0.08,
+      bandBob: 0.004,
+      haloDriftX: 0.014,
+      haloDriftY: 0.018,
     },
     activation: {
-      clusterApproachRadius: 1.58,
-      bandBaseOpacity: 0.085,
-      bandApproachOpacity: 0.06,
-      bandPulseOpacity: 0.18,
-      bandWidthBoost: 0.1,
-      bandHeightBoost: 0.05,
+      bandBaseOpacity: 0.018,
+      bandPulseOpacity: 0.075,
+      bandWidthBoost: 0.08,
+      bandHeightBoost: 0.04,
       bandDepthBoost: 0.018,
-      haloBaseOpacity: 0.042,
-      haloApproachOpacity: 0.016,
-      haloPulseOpacity: 0.05,
-      haloScaleXBoost: 0.46,
-      haloScaleYBoost: 0.78,
-      bodyThicknessBoost: 0.22,
-      bodyEnvBoost: 0.1,
-      bodyEmissiveBoost: 0.028,
-      bodyScaleBoost: 0.05,
+      haloBaseOpacity: 0.014,
+      haloPulseOpacity: 0.038,
+      haloScaleXBoost: 0.34,
+      haloScaleYBoost: 0.56,
+      bodyThicknessBoost: 0.62,
+      bodyEnvBoost: 0.12,
+      bodyEmissiveBoost: 0.018,
+      bodyScaleBoost: 0.038,
+      veilOpacity: 0.28,
+      veilScaleBoost: 0.12,
+      pulseOpacity: 0.08,
+      pulseScaleBoost: 0.14,
       rimOpacityBoost: 0.1,
-      rimEnvBoost: 0.12,
-      rimScaleBoost: 0.05,
-      travelBias: 0.032,
-      faceFlashScale: 0.08,
-      rimFlashScale: 0.07,
-      bandCoreSlide: 0.028,
-      approachTiltBoost: 0.01,
-      approachDepthBoost: 0.026,
-      auraWarmMix: 0.18,
-    },
-    sweep: {
-      travelX: 4.04,
-      passDuration: 4.12,
-      holdDuration: 0.36,
-      pulseAmplitude: 0.1,
-      flashAmplitude: 0.07,
+      rimEnvBoost: 0.1,
+      rimScaleBoost: 0.04,
     },
   },
-  clusters: {
+  chamber: {
     desktop: {
-      left: {
-        position: { x: -2.38, y: -0.04, z: 0.42 },
-        rotation: { x: 0.03, y: 0.2, z: -0.04 },
-        slots: [
-          {
-            name: "slotA",
-            position: { x: -0.34, y: 0.92, z: 0.38 },
-            rotation: { x: 0.08, y: 0.18, z: 0.05 },
-            scale: 0.94,
-            premiumShapeKey: "facetOblong",
-            callout: {
-              kicker: "Brand Matter",
-              title: "Premium form tuned for endemic fit",
-            },
-          },
-          {
-            name: "slotB",
-            position: { x: -0.08, y: -0.86, z: -0.06 },
-            rotation: { x: -0.04, y: 0.14, z: -0.18 },
-            scale: 0.92,
-            premiumShapeKey: "capsuleBar",
-            callout: {
-              kicker: "Campaign Form",
-              title: "Branded signal resolves inside the world",
-            },
-          },
-        ],
+      membrane: {
+        position: { x: 0.26, y: -0.08, z: 0.2 },
+        rotation: { x: 0.16, y: -0.36, z: 0.08 },
+        scale: { x: 1.07, y: 1.07, z: 1.07 },
       },
-      right: {
-        position: { x: 2.38, y: -0.02, z: 0.36 },
-        rotation: { x: -0.02, y: -0.22, z: 0.05 },
-        slots: [
-          {
-            name: "slotA",
-            position: { x: 0.2, y: 0.84, z: 0.3 },
-            rotation: { x: 0.06, y: -0.2, z: -0.03 },
-            scale: 0.96,
-            premiumShapeKey: "capsuleBar",
-            callout: {
-              kicker: "Rust Native",
-              title: "Utility read lands at first glance",
-            },
-          },
-          {
-            name: "slotB",
-            position: { x: 0.02, y: -0.88, z: -0.12 },
-            rotation: { x: -0.08, y: -0.18, z: 0.14 },
-            scale: 0.94,
-            premiumShapeKey: "facetOblong",
-            callout: {
-              kicker: "World Proof",
-              title: "Conversion settles into native matter",
-            },
-          },
-        ],
+      sphere: {
+        startX: -3.25,
+        startY: 0.16,
+        startZ: 0.34,
+        nearX: -1.08,
+        nearY: 0.12,
+        nearZ: 0.18,
+        crossX: -0.08,
+        crossY: 0.04,
+        crossZ: -0.08,
+        hiddenX: 0.16,
+        hiddenY: 0.02,
+        hiddenZ: -0.2,
+      },
+      object: {
+        startX: 0.2,
+        startY: 0,
+        startZ: -0.16,
+        restX: 1.68,
+        restY: -0.06,
+        restZ: 0.04,
+        holdX: 2.12,
+        holdY: -0.02,
+        holdZ: -0.02,
+        exitX: 2.58,
+        exitY: -0.2,
+        exitZ: -0.38,
       },
     },
     laptop: {
-      left: {
-        position: { x: -2.18, y: -0.08, z: 0.4 },
-        rotation: { x: 0.03, y: 0.18, z: -0.04 },
-        slots: [
-          {
-            name: "slotA",
-            position: { x: -0.28, y: 0.82, z: 0.34 },
-            rotation: { x: 0.06, y: 0.16, z: 0.05 },
-            scale: 0.9,
-            premiumShapeKey: "facetOblong",
-            callout: {
-              kicker: "Brand Matter",
-              title: "Premium form tuned for endemic fit",
-            },
-          },
-          {
-            name: "slotB",
-            position: { x: -0.06, y: -0.8, z: -0.06 },
-            rotation: { x: -0.04, y: 0.12, z: -0.16 },
-            scale: 0.88,
-            premiumShapeKey: "capsuleBar",
-            callout: {
-              kicker: "Campaign Form",
-              title: "Branded signal resolves inside the world",
-            },
-          },
-        ],
+      membrane: {
+        position: { x: 0.22, y: -0.1, z: 0.2 },
+        rotation: { x: 0.16, y: -0.34, z: 0.08 },
+        scale: { x: 1.02, y: 1.02, z: 1.02 },
       },
-      right: {
-        position: { x: 2.18, y: -0.06, z: 0.34 },
-        rotation: { x: -0.02, y: -0.2, z: 0.05 },
-        slots: [
-          {
-            name: "slotA",
-            position: { x: 0.18, y: 0.76, z: 0.24 },
-            rotation: { x: 0.05, y: -0.18, z: -0.03 },
-            scale: 0.92,
-            premiumShapeKey: "capsuleBar",
-            callout: {
-              kicker: "Rust Native",
-              title: "Utility read lands at first glance",
-            },
-          },
-          {
-            name: "slotB",
-            position: { x: 0.02, y: -0.82, z: -0.14 },
-            rotation: { x: -0.07, y: -0.16, z: 0.13 },
-            scale: 0.9,
-            premiumShapeKey: "facetOblong",
-            callout: {
-              kicker: "World Proof",
-              title: "Conversion settles into native matter",
-            },
-          },
-        ],
+      sphere: {
+        startX: -2.95,
+        startY: 0.14,
+        startZ: 0.32,
+        nearX: -0.98,
+        nearY: 0.1,
+        nearZ: 0.16,
+        crossX: -0.06,
+        crossY: 0.04,
+        crossZ: -0.08,
+        hiddenX: 0.14,
+        hiddenY: 0.02,
+        hiddenZ: -0.2,
+      },
+      object: {
+        startX: 0.18,
+        startY: -0.01,
+        startZ: -0.16,
+        restX: 1.56,
+        restY: -0.06,
+        restZ: 0.04,
+        holdX: 1.94,
+        holdY: -0.02,
+        holdZ: -0.02,
+        exitX: 2.34,
+        exitY: -0.18,
+        exitZ: -0.34,
       },
     },
     tablet: {
-      left: {
-        position: { x: -1.92, y: -0.1, z: 0.36 },
-        rotation: { x: 0.03, y: 0.14, z: -0.04 },
-        slots: [
-          {
-            name: "slotA",
-            position: { x: -0.14, y: 0.72, z: 0.26 },
-            rotation: { x: 0.05, y: 0.14, z: 0.04 },
-            scale: 0.84,
-            premiumShapeKey: "facetOblong",
-            callout: {
-              kicker: "Brand Matter",
-              title: "Premium form tuned for endemic fit",
-            },
-          },
-          {
-            name: "slotB",
-            position: { x: -0.02, y: -0.72, z: -0.08 },
-            rotation: { x: -0.04, y: 0.1, z: -0.14 },
-            scale: 0.82,
-            premiumShapeKey: "capsuleBar",
-            callout: {
-              kicker: "Campaign Form",
-              title: "Branded signal resolves inside the world",
-            },
-          },
-        ],
+      membrane: {
+        position: { x: 0.16, y: -0.18, z: 0.2 },
+        rotation: { x: 0.15, y: -0.32, z: 0.08 },
+        scale: { x: 0.97, y: 0.97, z: 0.97 },
       },
-      right: {
-        position: { x: 1.92, y: -0.08, z: 0.3 },
-        rotation: { x: -0.02, y: -0.16, z: 0.04 },
-        slots: [
-          {
-            name: "slotA",
-            position: { x: 0.1, y: 0.7, z: 0.18 },
-            rotation: { x: 0.04, y: -0.16, z: -0.02 },
-            scale: 0.86,
-            premiumShapeKey: "capsuleBar",
-            callout: {
-              kicker: "Rust Native",
-              title: "Utility read lands at first glance",
-            },
-          },
-          {
-            name: "slotB",
-            position: { x: 0.02, y: -0.76, z: -0.1 },
-            rotation: { x: -0.06, y: -0.14, z: 0.12 },
-            scale: 0.84,
-            premiumShapeKey: "facetOblong",
-            callout: {
-              kicker: "World Proof",
-              title: "Conversion settles into native matter",
-            },
-          },
-        ],
+      sphere: {
+        startX: -2.52,
+        startY: 0.1,
+        startZ: 0.28,
+        nearX: -0.86,
+        nearY: 0.08,
+        nearZ: 0.14,
+        crossX: -0.04,
+        crossY: 0.03,
+        crossZ: -0.08,
+        hiddenX: 0.12,
+        hiddenY: 0.02,
+        hiddenZ: -0.18,
+      },
+      object: {
+        startX: 0.16,
+        startY: -0.04,
+        startZ: -0.14,
+        restX: 1.34,
+        restY: -0.1,
+        restZ: 0.04,
+        holdX: 1.68,
+        holdY: -0.06,
+        holdZ: -0.02,
+        exitX: 2.04,
+        exitY: -0.2,
+        exitZ: -0.3,
       },
     },
     mobile: {
-      left: {
-        position: { x: -1.32, y: -0.18, z: 0.28 },
-        rotation: { x: 0.02, y: 0.08, z: -0.03 },
-        slots: [
-          {
-            name: "slotA",
-            position: { x: 0, y: 0.54, z: 0.14 },
-            rotation: { x: 0.04, y: 0.1, z: 0.04 },
-            scale: 0.74,
-            premiumShapeKey: "facetOblong",
-            callout: {
-              kicker: "Brand Matter",
-              title: "Premium form tuned for endemic fit",
-            },
-          },
-          {
-            name: "slotB",
-            position: { x: 0.02, y: -0.56, z: -0.08 },
-            rotation: { x: -0.03, y: 0.08, z: -0.12 },
-            scale: 0.72,
-            premiumShapeKey: "capsuleBar",
-            callout: {
-              kicker: "Campaign Form",
-              title: "Branded signal resolves inside the world",
-            },
-          },
-        ],
+      membrane: {
+        position: { x: 0.1, y: -0.3, z: 0.22 },
+        rotation: { x: 0.14, y: -0.28, z: 0.08 },
+        scale: { x: 0.9, y: 0.9, z: 0.9 },
       },
-      right: {
-        position: { x: 1.32, y: -0.16, z: 0.24 },
-        rotation: { x: -0.02, y: -0.1, z: 0.03 },
-        slots: [
-          {
-            name: "slotA",
-            position: { x: 0, y: 0.5, z: 0.12 },
-            rotation: { x: 0.03, y: -0.1, z: -0.02 },
-            scale: 0.76,
-            premiumShapeKey: "capsuleBar",
-            callout: {
-              kicker: "Rust Native",
-              title: "Utility read lands at first glance",
-            },
-          },
-          {
-            name: "slotB",
-            position: { x: 0.02, y: -0.58, z: -0.08 },
-            rotation: { x: -0.05, y: -0.08, z: 0.1 },
-            scale: 0.74,
-            premiumShapeKey: "facetOblong",
-            callout: {
-              kicker: "World Proof",
-              title: "Conversion settles into native matter",
-            },
-          },
-        ],
+      sphere: {
+        startX: -2.04,
+        startY: 0.04,
+        startZ: 0.24,
+        nearX: -0.72,
+        nearY: 0.04,
+        nearZ: 0.12,
+        crossX: -0.02,
+        crossY: 0.02,
+        crossZ: -0.08,
+        hiddenX: 0.1,
+        hiddenY: 0.01,
+        hiddenZ: -0.16,
+      },
+      object: {
+        startX: 0.12,
+        startY: -0.1,
+        startZ: -0.12,
+        restX: 1.08,
+        restY: -0.16,
+        restZ: 0.02,
+        holdX: 1.34,
+        holdY: -0.12,
+        holdZ: -0.02,
+        exitX: 1.68,
+        exitY: -0.24,
+        exitZ: -0.26,
       },
     },
   },
-  atmosphere: {
-    desktop: {
-      backdrop: {
-        position: { x: 0.04, y: -0.14, z: -5.75 },
-        scale: { x: 1, y: 1, z: 1 },
-      },
-      cool: {
-        position: { x: -2.74, y: 0.28, z: -2.86 },
-        scale: { x: 8.2, y: 6.1, z: 1 },
-      },
-      warm: {
-        position: { x: 2.76, y: -0.02, z: -2.58 },
-        scale: { x: 7.2, y: 5.3, z: 1 },
-      },
-      neutral: {
-        position: { x: 0.3, y: -0.12, z: -2.12 },
-        scale: { x: 4.5, y: 3.4, z: 1 },
-      },
-    },
-    laptop: {
-      backdrop: {
-        position: { x: 0.02, y: -0.2, z: -5.7 },
-        scale: { x: 0.98, y: 0.98, z: 1 },
-      },
-      cool: {
-        position: { x: -2.48, y: 0.16, z: -2.8 },
-        scale: { x: 7.4, y: 5.6, z: 1 },
-      },
-      warm: {
-        position: { x: 2.46, y: -0.14, z: -2.5 },
-        scale: { x: 6.6, y: 4.9, z: 1 },
-      },
-      neutral: {
-        position: { x: 0.24, y: -0.2, z: -2.06 },
-        scale: { x: 4.2, y: 3.1, z: 1 },
-      },
-    },
-    tablet: {
-      backdrop: {
-        position: { x: 0.02, y: -0.28, z: -5.66 },
-        scale: { x: 0.95, y: 0.95, z: 1 },
-      },
-      cool: {
-        position: { x: -2.12, y: 0.08, z: -2.72 },
-        scale: { x: 6.8, y: 5.2, z: 1 },
-      },
-      warm: {
-        position: { x: 2.08, y: -0.22, z: -2.42 },
-        scale: { x: 6.1, y: 4.6, z: 1 },
-      },
-      neutral: {
-        position: { x: 0.18, y: -0.26, z: -2 },
-        scale: { x: 3.9, y: 2.9, z: 1 },
-      },
-    },
-    mobile: {
-      backdrop: {
-        position: { x: 0, y: -0.34, z: -5.6 },
-        scale: { x: 0.9, y: 0.9, z: 1 },
-      },
-      cool: {
-        position: { x: -1.68, y: 0.02, z: -2.64 },
-        scale: { x: 5.8, y: 4.5, z: 1 },
-      },
-      warm: {
-        position: { x: 1.72, y: -0.28, z: -2.34 },
-        scale: { x: 5.3, y: 4.1, z: 1 },
-      },
-      neutral: {
-        position: { x: 0.08, y: -0.32, z: -1.96 },
-        scale: { x: 3.5, y: 2.6, z: 1 },
-      },
-    },
+  cycle: {
+    leadDelay: 0.76,
+    approachDuration: 1.2,
+    accelerateDuration: 0.42,
+    translateDuration: 0.32,
+    emergeDuration: 0.96,
+    settleDuration: 1.06,
+    fadeDuration: 0.74,
+    repeatDelay: 0.84,
   },
-  slot: {
-    shell: {
-      radius: 0.86,
-      detail: 2,
-      baseOpacity: 0.028,
-      peakOpacity: 0.18,
-      scaleBoost: 0.14,
-    },
-    depth: {
-      premiumZ: 0.24,
-      rustZ: -0.03,
-      calloutZ: 0.12,
-    },
-    reveal: {
-      leadDistance: 0.86,
-      trailDistance: 0.72,
-      overlapInner: 0.06,
-      overlapOuter: 0.24,
-      softnessOuter: 0.46,
-      premiumHiddenOpacity: 0.06,
-      rustHiddenOpacity: 0.02,
-      softOpacityPenalty: 0.12,
-      positionShift: 0.13,
-      liftShift: 0.08,
-      rotationShift: 0.065,
-      scaleIn: 0.95,
-      scaleOut: 1.01,
-    },
-    idle: {
-      floatAmplitude: 0.04,
-      floatSpeed: 0.42,
-      yawAmplitude: 0.045,
-      yawSpeed: 0.26,
-    },
-    calloutAnchor: {
-      x: 0.72,
-      y: 0.68,
-      z: 0.12,
-    },
-  },
-  callouts: {
-    duration: 1.35,
-    maxPerSide: 2,
-    sideOffsetX: 38,
-    sideOffsetY: -10,
-    fadeDuration: 0.28,
-    safeInsetX: 34,
-    safeInsetTop: 92,
-    safeInsetBottom: 126,
-  },
-  loop: {
-    rebuildDebounceMs: 120,
-  },
-  particles: {
-    count: 52,
-    radius: 4.6,
-    height: 4.2,
-    rotationYSpeed: 0.0035,
-    rotationXSwing: 0.008,
-    rotationZSwing: 0.006,
-    layers: [
-      {
-        density: 0.38,
-        radius: 4.9,
-        height: 4.8,
-        depthOffset: -2.3,
-        depthSpread: 1.6,
-        sizeScale: 0.76,
-        opacityScale: 0.42,
-        driftX: 0.04,
-        driftY: 0.045,
-        driftSpeed: 0.06,
-        bobSpeed: 0.08,
-        rotationYSpeed: 0.0022,
-        pointerParallax: 0.02,
-        seed: 11,
-      },
-      {
-        density: 0.36,
-        radius: 4.1,
-        height: 4.2,
-        depthOffset: -1.4,
-        depthSpread: 1.1,
-        sizeScale: 1,
-        opacityScale: 0.54,
-        driftX: 0.03,
-        driftY: 0.036,
-        driftSpeed: 0.05,
-        bobSpeed: 0.07,
-        rotationYSpeed: 0.003,
-        pointerParallax: 0.03,
-        seed: 23,
-      },
-      {
-        density: 0.26,
-        radius: 3.2,
-        height: 3.1,
-        depthOffset: -0.4,
-        depthSpread: 0.7,
-        sizeScale: 1.22,
-        opacityScale: 0.36,
-        driftX: 0.02,
-        driftY: 0.028,
-        driftSpeed: 0.04,
-        bobSpeed: 0.06,
-        rotationYSpeed: 0.0038,
-        pointerParallax: 0.04,
-        seed: 37,
-      },
-    ],
+  motion: {
+    stageFloatAmplitude: 0.022,
+    stageFloatSpeed: 0.24,
+    stageYawDrift: 0.014,
+    pointerRotationX: 0.03,
+    pointerRotationY: 0.06,
+    pointerShiftX: 0.1,
+    pointerShiftY: 0.06,
+    cameraShiftX: 0.14,
+    cameraShiftY: 0.1,
   },
   lights: {
     ambient: {
-      color: "#f2e7dc",
-      intensity: 0.18,
+      color: "#eef2f7",
+      intensity: 0.3,
     },
     hemisphere: {
-      skyColor: "#6682b8",
-      groundColor: "#6c3b28",
-      intensity: 0.12,
+      skyColor: "#7d92bb",
+      groundColor: "#16110f",
+      intensity: 0.24,
     },
-    coolKey: {
-      color: "#7f99c9",
-      intensity: 0.52,
-      position: { x: -4.2, y: 4.4, z: 5 },
+    key: {
+      color: "#d6e4ff",
+      intensity: 1.7,
+      position: { x: -3.6, y: 2.9, z: 4.8 },
+    },
+    rim: {
+      color: "#93a8d8",
+      intensity: 0.8,
+      position: { x: 3.4, y: 1.8, z: 3.4 },
     },
     membraneAccent: {
-      color: "#ecd7c2",
-      intensity: 2.4,
-      distance: 7.1,
+      color: "#a9c2ff",
+      intensity: 1.1,
+      distance: 5.2,
       decay: 2,
-      position: { x: 1.08, y: 1.16, z: 2.16 },
-    },
-  },
-  materials: {
-    backdropOpacity: 0.1,
-    backdropPulse: 0.014,
-    dustOpacity: 0.14,
-    dustSize: 0.018,
-  },
-  motion: {
-    pointerRotationX: 0.018,
-    pointerRotationY: 0.042,
-    pointerShiftX: 0.03,
-    pointerShiftY: 0.018,
-    cameraShiftX: 0.06,
-    cameraShiftY: 0.04,
-    depthParallaxX: 0.06,
-    depthParallaxY: 0.032,
-    glowParallaxX: 0.08,
-    clusterParallaxX: 0.07,
-    clusterParallaxY: 0.038,
-    idleFloatAmplitude: 0.018,
-    idleFloatSpeed: 0.24,
-    atmosphereDrift: 0.032,
-  },
-  postprocessing: {
-    bloom: {
-      strength: 0.09,
-      mobileStrength: 0.05,
-      radius: 0.52,
-      threshold: 0.9,
-      flashBoost: 0.028,
-    },
-    finish: {
-      rgbShift: 0.00022,
-      mobileRgbShift: 0,
-      vignette: 0.14,
-      mobileVignette: 0.1,
-      grain: 0.008,
-      mobileGrain: 0.005,
+      position: { x: 0.38, y: 0.12, z: 1.84 },
     },
   },
   reducedMotion: {
-    passDuration: 4.4,
-    holdDuration: 0.28,
-    pointerInteractionScale: 0.12,
-    flashAmplitude: 0.03,
-    pulseAmplitude: 0.04,
-    calloutsEnabled: false,
-    travelScale: 0.78,
-    conversionFxScale: 0.45,
-    membraneActivationScale: 0.55,
-    motionScale: 0.4,
+    interactionStrength: 0.06,
+    motionScale: 0.24,
+    cycleScale: 1.7,
   },
-  fogDensity: 0.05,
+  fogDensity: 0.034,
 };
 
 export function getHeroViewportKey(width) {
@@ -682,126 +413,33 @@ export function getHeroViewportKey(width) {
   return "desktop";
 }
 
-export function getHeroLayoutPreset(width) {
-  const viewportKey = getHeroViewportKey(width);
-
-  return {
-    viewportKey,
-    atmosphere: heroConfig.atmosphere[viewportKey],
-    clusters: heroConfig.clusters[viewportKey],
-    membrane: {
-      transform: getMembraneTransformPreset(viewportKey),
-      sweep: heroConfig.membrane.sweep,
-    },
-  };
-}
-
 export function getHeroResponsiveProfile(width, reducedMotion = false) {
   const viewportKey = getHeroViewportKey(width);
   const responsive = heroConfig.responsive[viewportKey];
   const isMobile = viewportKey === "mobile";
   const isTablet = viewportKey === "tablet";
-  const isLaptop = viewportKey === "laptop";
-  const travelScale = reducedMotion
-    ? heroConfig.reducedMotion.travelScale
-    : isMobile
-      ? 0.72
-      : isTablet
-        ? 0.82
-        : isLaptop
-          ? 0.92
-          : 1;
 
   return {
     viewportKey,
     isMobile,
     isTablet,
-    slotsPerSide: responsive.slotsPerSide,
     pixelRatioCap: responsive.pixelRatioCap,
-    dustCount: reducedMotion ? 18 : isMobile ? 24 : isTablet ? 38 : heroConfig.particles.count,
-    bloomStrength: isMobile
-      ? heroConfig.postprocessing.bloom.mobileStrength
-      : heroConfig.postprocessing.bloom.strength,
-    bloomRadius: heroConfig.postprocessing.bloom.radius,
-    bloomThreshold: heroConfig.postprocessing.bloom.threshold,
-    rgbShift: reducedMotion
-      ? 0
-      : isMobile
-        ? heroConfig.postprocessing.finish.mobileRgbShift
-        : heroConfig.postprocessing.finish.rgbShift,
-    vignette: isMobile
-      ? heroConfig.postprocessing.finish.mobileVignette
-      : heroConfig.postprocessing.finish.vignette,
-    grain: reducedMotion
-      ? heroConfig.postprocessing.finish.mobileGrain
-      : isMobile
-        ? heroConfig.postprocessing.finish.mobileGrain
-        : heroConfig.postprocessing.finish.grain,
     interactionStrength: reducedMotion
-      ? heroConfig.reducedMotion.pointerInteractionScale
+      ? heroConfig.reducedMotion.interactionStrength
       : isMobile
-        ? 0.48
+        ? 0.42
         : isTablet
           ? 0.7
           : 1,
-    motionScale: reducedMotion ? heroConfig.reducedMotion.motionScale : isMobile ? 0.72 : isTablet ? 0.86 : 1,
-    slotMotionScale: reducedMotion ? 0.32 : isMobile ? 0.56 : isTablet ? 0.76 : 1,
-    conversionFxScale: reducedMotion
-      ? heroConfig.reducedMotion.conversionFxScale
-      : isMobile
-        ? 0.62
-        : isTablet
-          ? 0.82
-          : 1,
-    membraneActivationScale: reducedMotion
-      ? heroConfig.reducedMotion.membraneActivationScale
+    motionScale: reducedMotion
+      ? heroConfig.reducedMotion.motionScale
       : isMobile
         ? 0.7
         : isTablet
           ? 0.86
           : 1,
-    atmosphereStrength: reducedMotion ? 0.16 : isMobile ? 0.48 : isTablet ? 0.72 : 1,
-    passDuration: reducedMotion ? heroConfig.reducedMotion.passDuration : heroConfig.membrane.sweep.passDuration,
-    holdDuration: reducedMotion ? heroConfig.reducedMotion.holdDuration : heroConfig.membrane.sweep.holdDuration,
-    travelX: heroConfig.membrane.sweep.travelX * travelScale,
-    pulseAmplitude: reducedMotion
-      ? heroConfig.reducedMotion.pulseAmplitude
-      : heroConfig.membrane.sweep.pulseAmplitude,
-    flashAmplitude: reducedMotion
-      ? heroConfig.reducedMotion.flashAmplitude
-      : heroConfig.membrane.sweep.flashAmplitude,
-    calloutsEnabled: reducedMotion
-      ? heroConfig.reducedMotion.calloutsEnabled
-      : !isMobile,
+    cycleScale: reducedMotion ? heroConfig.reducedMotion.cycleScale : 1,
+    camera: heroConfig.camera[viewportKey],
+    chamber: heroConfig.chamber[viewportKey],
   };
-}
-
-function getMembraneTransformPreset(viewportKey) {
-  switch (viewportKey) {
-    case "mobile":
-      return {
-        position: { x: 0.12, y: -0.4, z: 0.48 },
-        rotation: { x: 0.13, y: -0.34, z: 0.09 },
-        scale: { x: 0.92, y: 0.92, z: 0.92 },
-      };
-    case "tablet":
-      return {
-        position: { x: 0.16, y: -0.28, z: 0.46 },
-        rotation: { x: 0.14, y: -0.38, z: 0.1 },
-        scale: { x: 1, y: 1, z: 1 },
-      };
-    case "laptop":
-      return {
-        position: { x: 0.2, y: -0.18, z: 0.44 },
-        rotation: { x: 0.15, y: -0.4, z: 0.11 },
-        scale: { x: 1.08, y: 1.08, z: 1.08 },
-      };
-    case "desktop":
-    default:
-      return {
-        position: { x: 0.22, y: -0.1, z: 0.42 },
-        rotation: { x: 0.16, y: -0.42, z: 0.12 },
-        scale: { x: 1.14, y: 1.14, z: 1.14 },
-      };
-  }
 }

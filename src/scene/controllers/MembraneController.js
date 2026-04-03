@@ -12,12 +12,12 @@ export class MembraneController {
     this.baseRotation = new THREE.Euler();
     this.baseScale = new THREE.Vector3(1, 1, 1);
 
-    const { body, rim, sweepBand, halo } = config.geometry;
+    const { body, rim, sweepBand, halo, conversionVeil, conversionPulse } = config.geometry;
     const bodyGeometry = createMembraneBodyGeometry(body);
 
     this.membraneBody = new THREE.Mesh(bodyGeometry, materials.membrane);
     this.membraneBody.name = "membraneBody";
-    this.membraneBody.renderOrder = 2;
+    this.membraneBody.renderOrder = 3;
     this.group.add(this.membraneBody);
 
     this.membraneRim = new THREE.Mesh(
@@ -25,17 +25,15 @@ export class MembraneController {
       materials.membraneEdge,
     );
     this.membraneRim.name = "membraneRim";
-    this.membraneRim.position.z = body.depth * 0.16;
-    this.membraneRim.renderOrder = 3;
+    this.membraneRim.position.z = body.depth * 0.18;
+    this.membraneRim.renderOrder = 5;
     this.group.add(this.membraneRim);
 
     this.bandTexture = createSweepBandTexture();
-    this.bandBaseColor = new THREE.Color(config.palette.lightWarm);
-    this.bandHotColor = new THREE.Color(config.palette.lightWarm).lerp(
-      new THREE.Color(config.palette.warm),
-      0.22,
+    this.bandBaseColor = new THREE.Color(config.palette.cool).lerp(
+      new THREE.Color(config.palette.coolEdge),
+      0.4,
     );
-    this.haloWarmColor = new THREE.Color(config.palette.warm);
 
     this.activeSweepBand = new THREE.Mesh(
       createRoundedBandGeometry(sweepBand.width, sweepBand.height, sweepBand.radius),
@@ -45,14 +43,60 @@ export class MembraneController {
     this.activeSweepBand.material.map = this.bandTexture;
     this.activeSweepBand.material.alphaMap = this.bandTexture;
     this.activeSweepBand.material.needsUpdate = true;
-    this.activeSweepBand.position.z = body.depth * 0.62;
+    this.activeSweepBand.position.z = body.depth * 0.58;
     this.activeSweepBand.renderOrder = 4;
     this.bandBasePosition = this.activeSweepBand.position.clone();
     this.group.add(this.activeSweepBand);
 
+    this.conversionTexture = createConversionTexture();
+
+    this.conversionVeil = new THREE.Mesh(
+      createRoundedBandGeometry(
+        conversionVeil.width,
+        conversionVeil.height,
+        conversionVeil.radius,
+      ),
+      materials.conversionVeil.clone(),
+    );
+    this.conversionVeil.name = "conversionVeil";
+    this.conversionVeil.material.map = this.conversionTexture;
+    this.conversionVeil.material.alphaMap = this.conversionTexture;
+    this.conversionVeil.material.needsUpdate = true;
+    this.conversionVeil.position.set(
+      conversionVeil.offsetX,
+      conversionVeil.offsetY,
+      conversionVeil.offsetZ,
+    );
+    this.conversionVeil.renderOrder = 5;
+    this.veilBasePosition = this.conversionVeil.position.clone();
+    this.veilBaseScale = this.conversionVeil.scale.clone();
+    this.group.add(this.conversionVeil);
+
+    this.conversionPulse = new THREE.Mesh(
+      createRoundedBandGeometry(
+        conversionPulse.width,
+        conversionPulse.height,
+        conversionPulse.radius,
+      ),
+      materials.conversionPulse.clone(),
+    );
+    this.conversionPulse.name = "conversionPulse";
+    this.conversionPulse.material.map = this.conversionTexture;
+    this.conversionPulse.material.alphaMap = this.conversionTexture;
+    this.conversionPulse.material.needsUpdate = true;
+    this.conversionPulse.position.set(
+      conversionPulse.offsetX,
+      conversionPulse.offsetY,
+      conversionPulse.offsetZ,
+    );
+    this.conversionPulse.renderOrder = 6;
+    this.pulseBasePosition = this.conversionPulse.position.clone();
+    this.pulseBaseScale = this.conversionPulse.scale.clone();
+    this.group.add(this.conversionPulse);
+
     this.membraneHalo = createGlowSprite(
       glowTexture,
-      config.palette.cool,
+      config.palette.coolEdge,
       config.activation.haloBaseOpacity,
     );
     this.membraneHalo.name = "membraneHalo";
@@ -76,169 +120,150 @@ export class MembraneController {
 
   update({
     elapsed,
-    introProgress,
+    introProgress = 1,
     pointer,
     interactionStrength,
-    atmosphereStrength,
     motionScale = 1,
-    activationScale = 1,
-    sweepWorldX,
-    pulse,
-    flash,
-    direction = 1,
-    clusterTargets = [],
+    activation = 0,
+    phase = 0,
   }) {
-    const sweepRange = Math.max(this.config.sweep.travelX, Number.EPSILON);
-    const sweepRatio = THREE.MathUtils.clamp(
-      (sweepWorldX - this.basePosition.x) / sweepRange,
-      -1,
-      1,
-    );
-    const approach = getClusterApproach(
-      sweepWorldX,
-      clusterTargets,
-      this.config.activation.clusterApproachRadius,
-    );
-    const activation = THREE.MathUtils.clamp(
-      (approach * 0.7 + pulse * 1.1 + flash * 1.35) * activationScale,
-      0,
-      1.6,
+    const activationStrength = THREE.MathUtils.clamp(activation, 0, 1.2);
+    const phaseClamped = THREE.MathUtils.clamp(phase, 0, 1);
+    const lateralBandOffset = THREE.MathUtils.lerp(
+      -this.config.motion.bandTravelX,
+      this.config.motion.bandTravelX,
+      phaseClamped,
     );
 
-    this.group.position.x = sweepWorldX;
-    this.group.position.y =
+    this.group.position.set(
+      this.basePosition.x,
       this.basePosition.y +
-      Math.sin(elapsed * 0.2 + 1.2) *
-        this.config.motion.verticalDrift *
-        introProgress *
-        atmosphereStrength *
-        motionScale;
-    this.group.position.z =
-      this.basePosition.z +
-      Math.abs(sweepRatio) * this.config.motion.depthDrift * approach * activationScale +
-      flash * this.config.activation.approachDepthBoost * activationScale;
-
-    this.group.rotation.y =
-      this.baseRotation.y +
-      sweepRatio * this.config.motion.sweepYaw * motionScale +
-      direction * approach * this.config.activation.approachTiltBoost * activationScale -
-      pointer.x * this.config.motion.pointerYaw * interactionStrength * motionScale;
-    this.group.rotation.x =
-      this.baseRotation.x +
-      Math.cos(sweepRatio * Math.PI) * this.config.motion.sweepPitch * introProgress * motionScale -
-      pointer.y * this.config.motion.pointerPitch * interactionStrength * motionScale;
-    this.group.rotation.z =
-      this.baseRotation.z +
-      direction * approach * this.config.motion.sweepRoll * activationScale +
-      Math.sin(elapsed * 0.16 + 0.4) * 0.008 * introProgress * motionScale;
+        Math.sin(elapsed * 0.24 + 0.3) *
+          this.config.motion.verticalDrift *
+          introProgress *
+          motionScale,
+      this.basePosition.z,
+    );
+    this.group.rotation.set(
+      this.baseRotation.x -
+        pointer.y * this.config.motion.pointerPitch * interactionStrength * motionScale,
+      this.baseRotation.y -
+        pointer.x * this.config.motion.pointerYaw * interactionStrength * motionScale +
+        (phaseClamped - 0.5) * this.config.motion.phaseYaw * activationStrength,
+      this.baseRotation.z + Math.sin(elapsed * 0.18 + 0.5) * 0.008 * introProgress * motionScale,
+    );
     this.group.scale.set(
-      this.baseScale.x * (1 + activation * 0.018),
-      this.baseScale.y * (1 - activation * 0.008),
-      this.baseScale.z * (1 + activation * 0.018),
+      this.baseScale.x * (1 + activationStrength * 0.016),
+      this.baseScale.y * (1 - activationStrength * 0.01),
+      this.baseScale.z * (1 + activationStrength * 0.022),
     );
 
-    this.membraneBody.position.z = -pulse * 0.026 - approach * 0.012;
+    this.membraneBody.position.z = -activationStrength * 0.02;
     this.membraneBody.scale.set(
-      1 + flash * this.config.activation.faceFlashScale + approach * this.config.activation.bodyScaleBoost * 0.36,
-      1 - activation * 0.03,
-      1 + pulse * 0.12 + approach * this.config.activation.bodyScaleBoost * 0.56,
+      1 + activationStrength * this.config.activation.bodyScaleBoost * 0.8,
+      1 - activationStrength * 0.04,
+      1 + activationStrength * this.config.activation.bodyScaleBoost,
     );
 
-    this.membraneRim.position.z = this.config.geometry.body.depth * 0.16 + activation * 0.012;
+    this.membraneRim.position.z = this.config.geometry.body.depth * 0.18 + activationStrength * 0.014;
     this.membraneRim.scale.set(
-      1 + approach * this.config.activation.rimScaleBoost + flash * this.config.activation.rimFlashScale,
-      1 - activation * 0.018,
-      1 + approach * this.config.activation.rimScaleBoost + flash * this.config.activation.rimFlashScale,
+      1 + activationStrength * this.config.activation.rimScaleBoost,
+      1 - activationStrength * 0.016,
+      1 + activationStrength * this.config.activation.rimScaleBoost,
     );
 
-    this.activeSweepBand.position.x =
-      sweepRatio * this.config.motion.bandTravelX +
-      direction *
-        (approach * this.config.activation.travelBias * activationScale +
-          flash * this.config.activation.bandCoreSlide * activationScale);
+    this.activeSweepBand.position.x = lateralBandOffset;
     this.activeSweepBand.position.y =
-      Math.sin(elapsed * 0.34 + sweepRatio * 1.8) *
-        this.config.motion.bandBob *
-        atmosphereStrength *
-        motionScale +
-      direction * approach * this.config.motion.bandTravelY * activationScale;
+      Math.sin(elapsed * 0.42 + phaseClamped * Math.PI) *
+      this.config.motion.bandBob *
+      motionScale;
     this.activeSweepBand.position.z =
-      this.bandBasePosition.z + activation * this.config.activation.bandDepthBoost;
-    this.activeSweepBand.rotation.z = direction * 0.03 + sweepRatio * 0.024;
+      this.bandBasePosition.z + activationStrength * this.config.activation.bandDepthBoost;
+    this.activeSweepBand.rotation.z = THREE.MathUtils.lerp(-0.05, 0.05, phaseClamped);
     this.activeSweepBand.scale.set(
-      1 + approach * this.config.activation.bandWidthBoost + flash * 0.14,
-      1 + approach * 0.03 + pulse * this.config.activation.bandHeightBoost,
+      1 + activationStrength * this.config.activation.bandWidthBoost,
+      1 + activationStrength * this.config.activation.bandHeightBoost,
       1,
     );
     this.activeSweepBand.material.opacity =
       this.config.activation.bandBaseOpacity +
-      approach * this.config.activation.bandApproachOpacity +
-      flash * this.config.activation.bandPulseOpacity +
-      pulse * 0.06;
-    this.activeSweepBand.material.color.copy(this.bandBaseColor).lerp(
-      this.bandHotColor,
-      THREE.MathUtils.clamp(approach * 0.6 + flash * 0.9, 0, 1),
+      activationStrength * this.config.activation.bandPulseOpacity;
+    this.activeSweepBand.material.color.copy(this.bandBaseColor);
+
+    const veilOffset =
+      (phaseClamped - 0.44) * this.config.geometry.conversionVeil.travelX;
+    this.conversionVeil.position.x = this.veilBasePosition.x + veilOffset;
+    this.conversionVeil.scale.set(
+      this.veilBaseScale.x + activationStrength * this.config.activation.veilScaleBoost,
+      this.veilBaseScale.y + activationStrength * this.config.activation.veilScaleBoost * 0.7,
+      1,
     );
+    this.conversionVeil.material.opacity =
+      activationStrength *
+      this.config.activation.veilOpacity *
+      (0.52 + Math.sin(phaseClamped * Math.PI) * 0.48);
+
+    const pulseOffset =
+      (phaseClamped - 0.36) * this.config.geometry.conversionPulse.travelX;
+    this.conversionPulse.position.x = this.pulseBasePosition.x + pulseOffset;
+    this.conversionPulse.scale.set(
+      this.pulseBaseScale.x + activationStrength * this.config.activation.pulseScaleBoost,
+      this.pulseBaseScale.y + activationStrength * this.config.activation.pulseScaleBoost,
+      1,
+    );
+    this.conversionPulse.material.opacity =
+      activationStrength *
+      this.config.activation.pulseOpacity *
+      Math.sin(phaseClamped * Math.PI);
 
     this.membraneHalo.position.x =
       this.haloBasePosition.x +
-      Math.sin(elapsed * 0.22 + 0.5) *
+      Math.sin(elapsed * 0.22 + phaseClamped * Math.PI) *
         this.config.motion.haloDriftX *
-        atmosphereStrength *
         motionScale;
     this.membraneHalo.position.y =
       this.haloBasePosition.y +
-      Math.cos(elapsed * 0.19 + 1.1) *
+      Math.cos(elapsed * 0.19 + 0.8) *
         this.config.motion.haloDriftY *
-        atmosphereStrength *
         motionScale;
     this.membraneHalo.scale.set(
-      this.haloBaseScale.x + activation * this.config.activation.haloScaleXBoost,
-      this.haloBaseScale.y + activation * this.config.activation.haloScaleYBoost,
+      this.haloBaseScale.x + activationStrength * this.config.activation.haloScaleXBoost,
+      this.haloBaseScale.y + activationStrength * this.config.activation.haloScaleYBoost,
       1,
     );
-
-    if (this.membraneHalo.material) {
-      this.membraneHalo.material.opacity =
-        this.config.activation.haloBaseOpacity +
-        approach * this.config.activation.haloApproachOpacity +
-        flash * this.config.activation.haloPulseOpacity;
-      this.membraneHalo.material.color
-        .set(this.config.palette.cool)
-        .lerp(
-          this.haloWarmColor,
-          this.config.activation.auraWarmMix * THREE.MathUtils.clamp(approach + flash, 0, 1),
-        );
-    }
+    this.membraneHalo.material.opacity =
+      this.config.activation.haloBaseOpacity +
+      activationStrength * this.config.activation.haloPulseOpacity;
 
     this.materials.membrane.emissiveIntensity =
       this.config.appearance.emissiveIntensity +
-      activation * this.config.activation.bodyEmissiveBoost;
+      activationStrength * this.config.activation.bodyEmissiveBoost;
     this.materials.membrane.thickness =
-      this.config.appearance.thickness + activation * this.config.activation.bodyThicknessBoost;
-    this.materials.membrane.ior =
-      this.config.appearance.ior + flash * 0.015 + approach * 0.006;
-    this.materials.membrane.attenuationDistance =
-      this.config.appearance.attenuationDistance - approach * 0.08 - flash * 0.12;
+      this.config.appearance.thickness + activationStrength * this.config.activation.bodyThicknessBoost;
+    this.materials.membrane.ior = this.config.appearance.ior + activationStrength * 0.03;
+    this.materials.membrane.attenuationDistance = Math.max(
+      0.28,
+      this.config.appearance.attenuationDistance - activationStrength * 0.18,
+    );
     this.materials.membrane.envMapIntensity =
-      this.config.appearance.envMapIntensity + activation * this.config.activation.bodyEnvBoost;
+      this.config.appearance.envMapIntensity + activationStrength * this.config.activation.bodyEnvBoost;
 
     this.materials.membraneEdge.opacity =
-      this.config.appearance.rimOpacity + activation * this.config.activation.rimOpacityBoost;
+      this.config.appearance.rimOpacity + activationStrength * this.config.activation.rimOpacityBoost;
     this.materials.membraneEdge.envMapIntensity =
-      this.config.appearance.rimEnvMapIntensity + activation * this.config.activation.rimEnvBoost;
+      this.config.appearance.rimEnvMapIntensity + activationStrength * this.config.activation.rimEnvBoost;
     this.materials.membraneEdge.emissiveIntensity =
-      this.config.appearance.rimEmissiveIntensity + flash * 0.04 + approach * 0.02;
-  }
-
-  getSweepWorldX() {
-    return this.group.position.x;
+      this.config.appearance.rimEmissiveIntensity + activationStrength * 0.04;
   }
 
   destroy() {
     const bandTextures = new Set([
       this.activeSweepBand.material?.map,
       this.activeSweepBand.material?.alphaMap,
+      this.conversionVeil.material?.map,
+      this.conversionVeil.material?.alphaMap,
+      this.conversionPulse.material?.map,
+      this.conversionPulse.material?.alphaMap,
     ]);
 
     for (const texture of bandTextures) {
@@ -246,6 +271,9 @@ export class MembraneController {
     }
 
     this.activeSweepBand.material?.dispose();
+    this.conversionVeil.material?.dispose();
+    this.conversionPulse.material?.dispose();
+    this.membraneHalo.material?.dispose();
   }
 }
 
@@ -292,11 +320,11 @@ function createMembraneFrameGeometry(spec) {
   return geometry;
 }
 
-function createMembraneShape(radiusX, radiusY, {
-  exponent = 3,
-  shoulderPinch = 0.08,
-  points = 72,
-} = {}) {
+function createMembraneShape(
+  radiusX,
+  radiusY,
+  { exponent = 3, shoulderPinch = 0.08, points = 72 } = {},
+) {
   const shapePoints = [];
 
   for (let index = 0; index <= points; index += 1) {
@@ -355,9 +383,9 @@ function createSweepBandTexture() {
 
   const horizontalGradient = context.createLinearGradient(0, 0, width, 0);
   horizontalGradient.addColorStop(0, "rgba(255,255,255,0)");
-  horizontalGradient.addColorStop(0.18, "rgba(255,255,255,0.18)");
-  horizontalGradient.addColorStop(0.5, "rgba(255,255,255,1)");
-  horizontalGradient.addColorStop(0.82, "rgba(255,255,255,0.18)");
+  horizontalGradient.addColorStop(0.18, "rgba(255,255,255,0.14)");
+  horizontalGradient.addColorStop(0.5, "rgba(255,255,255,0.95)");
+  horizontalGradient.addColorStop(0.82, "rgba(255,255,255,0.14)");
   horizontalGradient.addColorStop(1, "rgba(255,255,255,0)");
   context.fillStyle = horizontalGradient;
   context.fillRect(0, 0, width, height);
@@ -365,9 +393,9 @@ function createSweepBandTexture() {
   context.globalCompositeOperation = "destination-in";
   const verticalGradient = context.createLinearGradient(0, 0, 0, height);
   verticalGradient.addColorStop(0, "rgba(255,255,255,0)");
-  verticalGradient.addColorStop(0.16, "rgba(255,255,255,0.52)");
+  verticalGradient.addColorStop(0.16, "rgba(255,255,255,0.44)");
   verticalGradient.addColorStop(0.5, "rgba(255,255,255,1)");
-  verticalGradient.addColorStop(0.84, "rgba(255,255,255,0.52)");
+  verticalGradient.addColorStop(0.84, "rgba(255,255,255,0.44)");
   verticalGradient.addColorStop(1, "rgba(255,255,255,0)");
   context.fillStyle = verticalGradient;
   context.fillRect(0, 0, width, height);
@@ -378,15 +406,48 @@ function createSweepBandTexture() {
   return texture;
 }
 
-function getClusterApproach(positionX, targets, radius) {
-  if (!targets.length || radius <= 0) {
-    return 0;
+function createConversionTexture() {
+  const width = 160;
+  const height = 320;
+  const canvas = document.createElement("canvas");
+  canvas.width = width;
+  canvas.height = height;
+
+  const context = canvas.getContext("2d");
+
+  if (!context) {
+    return new THREE.Texture();
   }
 
-  return targets.reduce((closest, targetX) => {
-    const proximity = 1 - THREE.MathUtils.clamp(Math.abs(positionX - targetX) / radius, 0, 1);
-    return Math.max(closest, proximity);
-  }, 0);
+  const horizontalGradient = context.createLinearGradient(0, 0, width, 0);
+  horizontalGradient.addColorStop(0, "rgba(255,255,255,0)");
+  horizontalGradient.addColorStop(0.18, "rgba(255,255,255,0.34)");
+  horizontalGradient.addColorStop(0.5, "rgba(255,255,255,1)");
+  horizontalGradient.addColorStop(0.82, "rgba(255,255,255,0.34)");
+  horizontalGradient.addColorStop(1, "rgba(255,255,255,0)");
+  context.fillStyle = horizontalGradient;
+  context.fillRect(0, 0, width, height);
+
+  context.globalCompositeOperation = "destination-in";
+  const radialGradient = context.createRadialGradient(
+    width * 0.5,
+    height * 0.5,
+    Math.min(width, height) * 0.08,
+    width * 0.5,
+    height * 0.5,
+    height * 0.48,
+  );
+  radialGradient.addColorStop(0, "rgba(255,255,255,1)");
+  radialGradient.addColorStop(0.36, "rgba(255,255,255,0.76)");
+  radialGradient.addColorStop(0.8, "rgba(255,255,255,0.12)");
+  radialGradient.addColorStop(1, "rgba(255,255,255,0)");
+  context.fillStyle = radialGradient;
+  context.fillRect(0, 0, width, height);
+
+  const texture = new THREE.CanvasTexture(canvas);
+  texture.colorSpace = THREE.NoColorSpace;
+  texture.needsUpdate = true;
+  return texture;
 }
 
 function createGlowSprite(texture, color, opacity) {
