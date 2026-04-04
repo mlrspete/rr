@@ -2,16 +2,15 @@ import { gsap } from "gsap";
 
 import "./styles.css";
 import { createHeroScene } from "./scene/heroScene.js";
-import {
-  curatedHeroAssetKeys,
-  resolveHeroAssetKey,
-} from "./scene/heroAssetRegistry.js";
+import { curatedHeroAssetKeys, resolveHeroAssetKey } from "./scene/heroAssetRegistry.js";
+import { resolveHeroEnvironmentKey } from "./scene/heroEnvironmentRegistry.js";
 
 const prefersReducedMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
 
 const heroCanvas = document.querySelector("[data-hero-canvas]");
 const heroStage = document.querySelector("[data-hero-stage]");
 const selectedHeroAssetKey = resolveHeroAssetKey(window.location.search);
+const selectedHeroEnvironmentKey = resolveHeroEnvironmentKey(window.location.search);
 
 const heroScene = heroCanvas
   ? createHeroScene({
@@ -19,6 +18,7 @@ const heroScene = heroCanvas
       interactionTarget: heroStage ?? window,
       reducedMotion: prefersReducedMotion,
       assetKey: selectedHeroAssetKey,
+      environmentKey: selectedHeroEnvironmentKey,
     })
   : null;
 

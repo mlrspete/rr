@@ -25,7 +25,7 @@ export class MembraneController {
       materials.membraneEdge,
     );
     this.membraneRim.name = "membraneRim";
-    this.membraneRim.position.z = body.depth * 0.18;
+    this.membraneRim.position.z = body.depth * 0.22;
     this.membraneRim.renderOrder = 5;
     this.group.add(this.membraneRim);
 
@@ -43,7 +43,7 @@ export class MembraneController {
     this.activeSweepBand.material.map = this.bandTexture;
     this.activeSweepBand.material.alphaMap = this.bandTexture;
     this.activeSweepBand.material.needsUpdate = true;
-    this.activeSweepBand.position.z = body.depth * 0.58;
+    this.activeSweepBand.position.z = body.depth * 0.64;
     this.activeSweepBand.renderOrder = 4;
     this.bandBasePosition = this.activeSweepBand.position.clone();
     this.group.add(this.activeSweepBand);
@@ -162,6 +162,11 @@ export class MembraneController {
     const idleFrost =
       (Math.sin(elapsed * 0.17 + 0.66) + Math.cos(elapsed * 0.11 + 1.18)) * 0.25 + 0.5;
     const idleBodyBreath = idleBreath * 0.35;
+    // Keep the emergence read premium with a restrained front-face push instead of jelly motion.
+    const emergencePulse =
+      activationStrength *
+      smoothstep(THREE.MathUtils.clamp((phaseClamped - 0.24) / 0.2, 0, 1)) *
+      (1 - smoothstep(THREE.MathUtils.clamp((phaseClamped - 0.82) / 0.16, 0, 1)));
 
     this.group.position.set(
       this.basePosition.x + idleLateralDrift * introMotion,
@@ -180,26 +185,45 @@ export class MembraneController {
       this.baseRotation.z + idleRoll,
     );
     this.group.scale.set(
-      this.baseScale.x * (1 + idleBreath * 0.7 + activationStrength * 0.016),
-      this.baseScale.y * (1 - idleBreath * 0.28 - activationStrength * 0.01),
-      this.baseScale.z * (1 + idleBreath + activationStrength * 0.022),
+      this.baseScale.x *
+        (1 + idleBreath * 0.24 + activationStrength * 0.008 - emergencePulse * 0.01),
+      this.baseScale.y *
+        (1 - idleBreath * 0.08 - activationStrength * 0.005 - emergencePulse * 0.012),
+      this.baseScale.z *
+        (1 + idleBreath * 0.18 + activationStrength * 0.012 + emergencePulse * 0.028),
     );
 
-    this.membraneBody.position.z = -activationStrength * 0.02 - idleBodyBreath * 0.018;
+    this.membraneBody.position.z =
+      -activationStrength * 0.008 -
+      idleBodyBreath * 0.01 +
+      emergencePulse * 0.034;
     this.membraneBody.scale.set(
-      1 + idleBodyBreath * 0.34 + activationStrength * activationConfig.bodyScaleBoost * 0.8,
-      1 - idleBodyBreath * 0.14 - activationStrength * 0.04,
-      1 + idleBodyBreath * 0.48 + activationStrength * activationConfig.bodyScaleBoost,
+      1 +
+        idleBodyBreath * 0.12 +
+        activationStrength * activationConfig.bodyScaleBoost * 0.55 -
+        emergencePulse * 0.018,
+      1 - idleBodyBreath * 0.04 - activationStrength * 0.018 - emergencePulse * 0.016,
+      1 +
+        idleBodyBreath * 0.18 +
+        activationStrength * (activationConfig.bodyScaleBoost + 0.02) +
+        emergencePulse * 0.12,
     );
 
     this.membraneRim.position.z =
-      this.config.geometry.body.depth * 0.18 +
-      activationStrength * 0.014 +
-      idleBodyBreath * 0.014;
+      this.config.geometry.body.depth * 0.22 +
+      activationStrength * 0.01 +
+      idleBodyBreath * 0.008 +
+      emergencePulse * 0.028;
     this.membraneRim.scale.set(
-      1 + idleBodyBreath * 0.18 + activationStrength * activationConfig.rimScaleBoost,
-      1 - idleBodyBreath * 0.08 - activationStrength * 0.016,
-      1 + idleBodyBreath * 0.22 + activationStrength * activationConfig.rimScaleBoost,
+      1 +
+        idleBodyBreath * 0.08 +
+        activationStrength * activationConfig.rimScaleBoost -
+        emergencePulse * 0.012,
+      1 - idleBodyBreath * 0.03 - activationStrength * 0.01 - emergencePulse * 0.008,
+      1 +
+        idleBodyBreath * 0.14 +
+        activationStrength * (activationConfig.rimScaleBoost + 0.006) +
+        emergencePulse * 0.08,
     );
 
     this.activeSweepBand.position.x = lateralBandOffset;
@@ -209,11 +233,19 @@ export class MembraneController {
         motionScale +
       Math.sin(elapsed * 0.18 + 0.24) * motion.bandBob * 0.35 * introMotion;
     this.activeSweepBand.position.z =
-      this.bandBasePosition.z + activationStrength * activationConfig.bandDepthBoost;
+      this.bandBasePosition.z +
+      activationStrength * activationConfig.bandDepthBoost +
+      emergencePulse * 0.032;
     this.activeSweepBand.rotation.z = THREE.MathUtils.lerp(-0.05, 0.05, phaseClamped);
     this.activeSweepBand.scale.set(
-      1 + idleBreath * 0.16 + activationStrength * activationConfig.bandWidthBoost,
-      1 + idleBreath * 0.1 + activationStrength * activationConfig.bandHeightBoost,
+      1 +
+        idleBreath * 0.08 +
+        activationStrength * activationConfig.bandWidthBoost +
+        emergencePulse * 0.06,
+      1 +
+        idleBreath * 0.05 +
+        activationStrength * activationConfig.bandHeightBoost +
+        emergencePulse * 0.045,
       1,
     );
     this.activeSweepBand.material.opacity =
@@ -225,28 +257,39 @@ export class MembraneController {
     const veilOffset =
       (phaseClamped - 0.44) * this.config.geometry.conversionVeil.travelX;
     this.conversionVeil.position.x = this.veilBasePosition.x + veilOffset;
+    this.conversionVeil.position.z = this.veilBasePosition.z + emergencePulse * 0.05;
     this.conversionVeil.scale.set(
-      this.veilBaseScale.x + activationStrength * this.config.activation.veilScaleBoost,
-      this.veilBaseScale.y + activationStrength * this.config.activation.veilScaleBoost * 0.7,
+      this.veilBaseScale.x +
+        activationStrength * this.config.activation.veilScaleBoost +
+        emergencePulse * 0.08,
+      this.veilBaseScale.y +
+        activationStrength * this.config.activation.veilScaleBoost * 0.7 +
+        emergencePulse * 0.05,
       1,
     );
     this.conversionVeil.material.opacity =
       activationStrength *
       this.config.activation.veilOpacity *
-      (0.52 + Math.sin(phaseClamped * Math.PI) * 0.48);
+      (0.36 + Math.sin(phaseClamped * Math.PI) * 0.34 + emergencePulse * 0.4);
 
     const pulseOffset =
       (phaseClamped - 0.36) * this.config.geometry.conversionPulse.travelX;
     this.conversionPulse.position.x = this.pulseBasePosition.x + pulseOffset;
+    this.conversionPulse.position.z = this.pulseBasePosition.z + emergencePulse * 0.065;
     this.conversionPulse.scale.set(
-      this.pulseBaseScale.x + activationStrength * this.config.activation.pulseScaleBoost,
-      this.pulseBaseScale.y + activationStrength * this.config.activation.pulseScaleBoost,
+      this.pulseBaseScale.x +
+        activationStrength * this.config.activation.pulseScaleBoost +
+        emergencePulse * 0.1,
+      this.pulseBaseScale.y +
+        activationStrength * this.config.activation.pulseScaleBoost +
+        emergencePulse * 0.08,
       1,
     );
     this.conversionPulse.material.opacity =
       activationStrength *
       this.config.activation.pulseOpacity *
-      Math.sin(phaseClamped * Math.PI);
+      Math.sin(phaseClamped * Math.PI) *
+      (0.72 + emergencePulse * 0.5);
 
     this.membraneHalo.position.x =
       this.haloBasePosition.x +
@@ -343,13 +386,13 @@ export class MembraneController {
 }
 
 function createMembraneBodyGeometry(spec) {
-  const shape = createMembraneShape(spec.radiusX, spec.radiusY, spec);
+  const shape = createMembraneFaceShape(spec);
   const geometry = new THREE.ExtrudeGeometry(shape, {
     depth: spec.depth,
     bevelEnabled: true,
-    bevelSegments: 8,
+    bevelSegments: spec.bevelSegments ?? 8,
     steps: 1,
-    curveSegments: spec.points ?? 72,
+    curveSegments: spec.cornerSegments ?? spec.points ?? 24,
     bevelSize: spec.bevelSize,
     bevelThickness: spec.bevelThickness,
   });
@@ -359,8 +402,49 @@ function createMembraneBodyGeometry(spec) {
 }
 
 function createMembraneFrameGeometry(spec) {
-  const shape = createMembraneShape(spec.radiusX, spec.radiusY, spec);
-  const innerShape = createMembraneShape(
+  const shape = createMembraneFaceShape(spec);
+  const innerShape = createMembraneInnerFaceShape(spec);
+
+  const hole = new THREE.Path();
+  hole.setFromPoints(innerShape.getPoints(spec.cornerSegments ?? spec.points ?? 24).reverse());
+  shape.holes.push(hole);
+
+  const geometry = new THREE.ExtrudeGeometry(shape, {
+    depth: spec.depth,
+    bevelEnabled: true,
+    bevelSegments: spec.bevelSegments ?? 4,
+    steps: 1,
+    curveSegments: spec.cornerSegments ?? spec.points ?? 24,
+    bevelSize: spec.bevelSize ?? 0.018,
+    bevelThickness: spec.bevelThickness ?? 0.03,
+  });
+
+  geometry.center();
+  return geometry;
+}
+
+function createMembraneFaceShape(spec) {
+  if (spec.width && spec.height) {
+    return createRoundedRectShape(spec.width, spec.height, {
+      cornerRadius: spec.cornerRadius,
+    });
+  }
+
+  return createSuperellipseShape(spec.radiusX, spec.radiusY, spec);
+}
+
+function createMembraneInnerFaceShape(spec) {
+  if (spec.width && spec.height) {
+    return createRoundedRectShape(
+      Math.max(spec.width - spec.frame * 2, 0.08),
+      Math.max(spec.height - spec.frame * 2, 0.08),
+      {
+        cornerRadius: Math.max((spec.cornerRadius ?? 0.08) - spec.frame * 0.85, 0.06),
+      },
+    );
+  }
+
+  return createSuperellipseShape(
     Math.max(spec.radiusX - spec.frame, 0.06),
     Math.max(spec.radiusY - spec.frame, 0.06),
     {
@@ -369,23 +453,28 @@ function createMembraneFrameGeometry(spec) {
       points: spec.points,
     },
   );
-
-  const hole = new THREE.Path();
-  hole.setFromPoints(innerShape.getPoints(spec.points ?? 72).reverse());
-  shape.holes.push(hole);
-
-  const geometry = new THREE.ExtrudeGeometry(shape, {
-    depth: spec.depth,
-    bevelEnabled: false,
-    steps: 1,
-    curveSegments: spec.points ?? 72,
-  });
-
-  geometry.center();
-  return geometry;
 }
 
-function createMembraneShape(
+function createRoundedRectShape(width, height, { cornerRadius = 0.24 } = {}) {
+  const shape = new THREE.Shape();
+  const halfWidth = width * 0.5;
+  const halfHeight = height * 0.5;
+  const radius = Math.min(cornerRadius, halfWidth, halfHeight);
+
+  shape.moveTo(-halfWidth + radius, -halfHeight);
+  shape.lineTo(halfWidth - radius, -halfHeight);
+  shape.absarc(halfWidth - radius, -halfHeight + radius, radius, -Math.PI / 2, 0);
+  shape.lineTo(halfWidth, halfHeight - radius);
+  shape.absarc(halfWidth - radius, halfHeight - radius, radius, 0, Math.PI / 2);
+  shape.lineTo(-halfWidth + radius, halfHeight);
+  shape.absarc(-halfWidth + radius, halfHeight - radius, radius, Math.PI / 2, Math.PI);
+  shape.lineTo(-halfWidth, -halfHeight + radius);
+  shape.absarc(-halfWidth + radius, -halfHeight + radius, radius, Math.PI, Math.PI * 1.5);
+
+  return shape;
+}
+
+function createSuperellipseShape(
   radiusX,
   radiusY,
   { exponent = 3, shoulderPinch = 0.08, points = 72 } = {},
@@ -410,6 +499,11 @@ function createMembraneShape(
   }
 
   return new THREE.Shape(shapePoints);
+}
+
+function smoothstep(value) {
+  const clamped = THREE.MathUtils.clamp(value, 0, 1);
+  return clamped * clamped * (3 - 2 * clamped);
 }
 
 function createRoundedBandGeometry(width, height, radius) {

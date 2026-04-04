@@ -3,7 +3,6 @@ import { gsap } from "gsap";
 import { RoomEnvironment } from "three/examples/jsm/environments/RoomEnvironment.js";
 import { EXRLoader } from "three/examples/jsm/loaders/EXRLoader.js";
 
-import ferndaleStudioHdriUrl from "../../ferndale_studio_06_4k.exr?url";
 import { getHeroResponsiveProfile, heroConfig } from "./config.js";
 import {
   clearHeroAssetCache,
@@ -16,6 +15,10 @@ import {
   defaultHeroAssetKey,
   getHeroAssetSpec,
 } from "./heroAssetRegistry.js";
+import {
+  defaultHeroEnvironmentKey,
+  getHeroEnvironmentSpec,
+} from "./heroEnvironmentRegistry.js";
 import { createHeroAssetMaterial, createHeroMaterials } from "./materials.js";
 import { AmbientParticlesController } from "./controllers/AmbientParticlesController.js";
 import { MembraneController } from "./controllers/MembraneController.js";
@@ -26,6 +29,7 @@ export function createHeroScene({
   interactionTarget = window,
   reducedMotion = false,
   assetKey = defaultHeroAssetKey,
+  environmentKey = defaultHeroEnvironmentKey,
 } = {}) {
   if (!container) {
     return null;
@@ -92,7 +96,6 @@ export function createHeroScene({
     config: heroConfig.sphereStream,
     sphereConfig: heroConfig.sphere,
     baseMaterial: materials.sphere,
-    reducedMotion,
   });
   const ambientParticlesController = new AmbientParticlesController({
     config: heroConfig.ambientParticles,
@@ -116,11 +119,11 @@ export function createHeroScene({
     sphereNear: 0.36,
     sphereImpact: 0.5,
     sphereHidden: 0.59,
-    objectHidden: 0.61,
-    objectReveal: 0.76,
-    objectDisplay: 0.84,
-    objectDrift: 0.91,
-    objectExit: 0.992,
+    objectHidden: 0.635,
+    objectReveal: 0.8,
+    objectDisplay: 0.88,
+    objectDrift: 0.948,
+    objectExit: 0.996,
   };
 
   let environmentTarget = null;
@@ -137,11 +140,12 @@ export function createHeroScene({
   let cycleTimeline = null;
   let initialized = false;
   let isDestroyed = false;
-  let hasPresentedFirstFrame = false;
+  let hasStartedPresentation = false;
   let hasResolvedReady = false;
   let resolveReadyPromise = () => {};
   let assetActivationToken = 0;
   let translationCurve = createTranslationCurve(responsiveProfile.chamber);
+  const activeEnvironmentSpec = getHeroEnvironmentSpec(environmentKey);
   const readyPromise = new Promise((resolve) => {
     resolveReadyPromise = resolve;
   });
@@ -279,7 +283,7 @@ export function createHeroScene({
       cycleTimeline?.pause(0);
       resetCycleState(cycleState);
 
-      if (reducedMotion || introState.progress >= 1) {
+      if (hasStartedPresentation && (reducedMotion || introState.progress >= 1)) {
         cycleTimeline?.play(0);
       }
     }
@@ -341,7 +345,7 @@ export function createHeroScene({
           endActivation: 0.03,
           endPhase: 0.06,
           hiddenSphereOpacity: 0.22,
-          hiddenObjectOpacity: 0.04,
+          hiddenObjectOpacity: 0.02,
           hiddenObjectScale: 0.96,
           impactScale: 1.02,
           exitScale: 1.02,
@@ -360,7 +364,7 @@ export function createHeroScene({
           endActivation: 0.04,
           endPhase: 0.08,
           hiddenSphereOpacity: 0.05,
-          hiddenObjectOpacity: 0.08,
+          hiddenObjectOpacity: 0.03,
           hiddenObjectScale: 0.92,
           impactScale: 1.05,
           exitScale: 1.04,
@@ -480,7 +484,7 @@ export function createHeroScene({
         ">",
       );
 
-    if (shouldPlay || reducedMotion || introState.progress >= 1) {
+    if (shouldPlay || (hasStartedPresentation && (reducedMotion || introState.progress >= 1))) {
       cycleTimeline.play(0);
     }
   }
@@ -501,7 +505,7 @@ export function createHeroScene({
     }
   }
 
-  function startIntro() {
+  function applyIntroStartingPose() {
     introRig.position.set(
       heroConfig.intro.startPosition.x,
       heroConfig.intro.startPosition.y,
@@ -519,6 +523,17 @@ export function createHeroScene({
       introRig.rotation.set(0, 0, 0);
       stageRig.scale.setScalar(1);
       introState.progress = 1;
+      return;
+    }
+
+    introState.progress = 0;
+  }
+
+  function startIntro() {
+    applyIntroStartingPose();
+    hasStartedPresentation = true;
+
+    if (reducedMotion) {
       cycleTimeline?.play(0);
       return;
     }
@@ -540,12 +555,7 @@ export function createHeroScene({
     });
   }
 
-  function render() {
-    if (isDestroyed) {
-      return;
-    }
-
-    const elapsed = clock.getElapsedTime();
+  function updateSceneFrame(elapsed) {
     const motionScale = responsiveProfile.motionScale;
     const interactionStrength = responsiveProfile.interactionStrength;
     const smoothFactor = 0.04 + interactionStrength * 0.016;
@@ -603,57 +613,112 @@ export function createHeroScene({
       activation: cycleState.membraneActivation,
       phase: cycleState.membranePhase,
     });
+  }
 
+  function renderFrame(elapsed = clock.getElapsedTime()) {
+    updateSceneFrame(elapsed);
     renderer.render(scene, camera);
+  }
 
-    if (!hasPresentedFirstFrame) {
-      hasPresentedFirstFrame = true;
-      container.dataset.ready = "true";
-      resolveReady(currentAssetKey);
+  function revealScene() {
+    if (isDestroyed) {
+      return;
     }
 
+    container.dataset.ready = "true";
+    resolveReady(currentAssetKey);
+  }
+
+  function render() {
+    if (isDestroyed) {
+      return;
+    }
+
+    renderFrame();
     animationFrame = window.requestAnimationFrame(render);
   }
 
-  async function enhanceEnvironment() {
+  async function preparePrimaryEnvironment() {
     try {
-      const environmentTexture = await loadEnvironmentTexture({
+      return await loadEnvironmentTexture({
         pmremGenerator,
         exrLoader,
+        environmentSpec: activeEnvironmentSpec,
       });
+    } catch (error) {
+      console.warn(
+        `REAL RUST hero could not load ${activeEnvironmentSpec.label}. Using the fallback environment.`,
+        error,
+      );
 
       if (isDestroyed) {
-        environmentTexture.target?.dispose?.();
-        environmentTexture.fallbackScene?.dispose?.();
+        return null;
+      }
+
+      return createFallbackEnvironmentTexture({ pmremGenerator });
+    }
+  }
+
+  async function precompileCriticalView() {
+    try {
+      if (typeof renderer.compileAsync === "function") {
+        await renderer.compileAsync(scene, camera);
         return;
       }
 
-      applyEnvironment(environmentTexture);
+      renderer.compile?.(scene, camera);
     } catch (error) {
-      console.warn(
-        "REAL RUST hero could not load ferndale_studio_06_4k.exr. Keeping fallback environment.",
-        error,
-      );
+      console.warn("REAL RUST hero could not precompile the first-view shaders.", error);
     }
+  }
+
+  async function prepareFirstView() {
+    const [, environmentTexture] = await Promise.all([
+      ensureAssetInstance(currentAssetKey),
+      preparePrimaryEnvironment(),
+    ]);
+
+    if (!environmentTexture) {
+      if (isDestroyed) {
+        return;
+      }
+
+      throw new Error("REAL RUST hero could not prepare a scene environment.");
+    }
+
+    if (isDestroyed) {
+      environmentTexture?.target?.dispose?.();
+      environmentTexture?.fallbackScene?.dispose?.();
+      return;
+    }
+
+    applyEnvironment(environmentTexture);
+    applyIntroStartingPose();
+    syncActiveAssetVisibility();
+    updateSceneFrame(0);
+    await precompileCriticalView();
+
+    if (isDestroyed) {
+      return;
+    }
+
+    renderFrame(0);
   }
 
   async function initialize() {
     try {
-      applyEnvironment(createFallbackEnvironmentTexture({ pmremGenerator }));
       resize();
       rebuildCycleTimeline();
       initialized = true;
+      await prepareFirstView();
 
-      void ensureAssetInstance(currentAssetKey);
-      readyPromise.then((readyKey) => {
-        if (!readyKey || isDestroyed) {
-          return;
-        }
+      if (isDestroyed) {
+        return;
+      }
 
-        void enhanceEnvironment();
-      });
-
+      clock.start();
       startIntro();
+      revealScene();
       render();
     } catch (error) {
       resolveReady(null);
@@ -770,10 +835,10 @@ function createFallbackEnvironmentTexture({ pmremGenerator }) {
   };
 }
 
-async function loadEnvironmentTexture({ pmremGenerator, exrLoader }) {
+async function loadEnvironmentTexture({ pmremGenerator, exrLoader, environmentSpec }) {
   pmremGenerator.compileEquirectangularShader();
 
-  const exrTexture = await exrLoader.loadAsync(ferndaleStudioHdriUrl);
+  const exrTexture = await exrLoader.loadAsync(environmentSpec.sourceUrl);
   exrTexture.mapping = THREE.EquirectangularReflectionMapping;
 
   const target = pmremGenerator.fromEquirectangular(exrTexture);
@@ -883,11 +948,11 @@ function applyActiveAssetState(instance, cycleState, translationCurve, elapsed) 
     Math.sin(elapsed * instance.spec.wobbleSpeed + wobblePhase) *
     instance.spec.wobbleAmount *
     reveal;
-  const pathYaw = THREE.MathUtils.clamp(Math.atan2(tangent.x, tangent.z) * 0.22, -0.2, 0.2);
+  const pathYaw = THREE.MathUtils.clamp(Math.atan2(tangent.x, tangent.z) * 0.16, -0.14, 0.14);
   const pathPitch = THREE.MathUtils.clamp(
-    -Math.atan2(tangent.y, Math.hypot(tangent.x, tangent.z)) * 0.4,
-    -0.12,
-    0.12,
+    -Math.atan2(tangent.y, Math.hypot(tangent.x, tangent.z)) * 0.32,
+    -0.1,
+    0.1,
   );
 
   instance.group.visible = cycleState.objectOpacity > 0.002;

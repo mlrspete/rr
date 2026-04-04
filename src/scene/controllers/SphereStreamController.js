@@ -1,12 +1,11 @@
 import * as THREE from "three";
 
-const DEFAULT_LANE_ORDER = ["mid", "low", "upperMid"];
+const DEFAULT_LANE_ORDER = ["mid", "upperMid", "mid", "low"];
 
 export class SphereStreamController {
-  constructor({ config, sphereConfig, baseMaterial, reducedMotion = false }) {
+  constructor({ config, sphereConfig, baseMaterial }) {
     this.config = config;
     this.sphereConfig = sphereConfig;
-    this.reducedMotion = reducedMotion;
     this.group = new THREE.Group();
     this.group.name = "sphereStream";
 
@@ -18,28 +17,13 @@ export class SphereStreamController {
     );
 
     this.geometry = createSphereGeometry(sphereConfig);
-    this.trailSlots = (config.trailSlots ?? []).slice(
-      0,
-      Math.max(0, (config.poolSize ?? 3) - 1),
-    );
-    this.entries = [
-      createSphereEntry({
-        geometry: this.geometry,
-        material: baseMaterial.clone(),
-        name: "leadSphere",
-      }),
-      ...this.trailSlots.map((slot, index) =>
-        createSphereEntry({
-          geometry: this.geometry,
-          material: baseMaterial.clone(),
-          name: `trailSphere${index + 1}`,
-        }),
-      ),
-    ];
+    this.entry = createSphereEntry({
+      geometry: this.geometry,
+      material: baseMaterial.clone(),
+      name: "leadSphere",
+    });
 
-    for (const entry of this.entries) {
-      this.group.add(entry.mesh);
-    }
+    this.group.add(this.entry.mesh);
   }
 
   setLayout(chamberProfile) {
@@ -66,55 +50,21 @@ export class SphereStreamController {
     const leadCurve = this.laneCurves.get(leadLaneKey);
 
     applyLeadSphereState({
-      entry: this.entries[0],
+      entry: this.entry,
       curve: leadCurve,
       lane: leadLane,
       leadPathPhase,
       leadOpacity,
       leadScale,
       elapsed,
+      motionScale,
       sphereConfig: this.sphereConfig,
       motionConfig: this.config.motion,
-    });
-
-    const reducedMotionScale = this.reducedMotion
-      ? this.config.reducedMotionTimeScale ?? 0.74
-      : 1;
-    const streamTime = elapsed * reducedMotionScale;
-    const trailDuration = Math.max(this.config.trailTravelDuration ?? 2.85, 0.001);
-
-    this.trailSlots.forEach((slot, slotIndex) => {
-      const entry = this.entries[slotIndex + 1];
-      const loopTime = streamTime + (slot.timeOffset ?? 0);
-      const iteration = Math.floor(loopTime / trailDuration);
-      const laneIndex = positiveModuloInt(iteration + (slot.laneShift ?? 0), this.laneOrder.length);
-      const laneKey = this.laneOrder[laneIndex] ?? this.laneOrder[0];
-      const lane = this.config.lanes?.[laneKey];
-      const curve = this.laneCurves.get(laneKey);
-      const phase = positiveModulo(loopTime / trailDuration + (lane?.phaseOffset ?? 0), 1);
-
-      applyTrailSphereState({
-        entry,
-        curve,
-        lane,
-        slot,
-        phase,
-        elapsed,
-        motionScale,
-        reducedMotion: this.reducedMotion,
-        trailEndProgress: this.config.trailEndProgress ?? 0.82,
-        fadeInEnd: this.config.trailFadeInEnd ?? 0.18,
-        fadeOutStart: this.config.trailFadeOutStart ?? 0.68,
-        motionConfig: this.config.motion,
-      });
     });
   }
 
   destroy() {
-    for (const entry of this.entries) {
-      entry.material.dispose();
-    }
-
+    this.entry.material.dispose();
     this.geometry.dispose();
   }
 }
@@ -172,6 +122,7 @@ function applyLeadSphereState({
   leadOpacity,
   leadScale,
   elapsed,
+  motionScale,
   sphereConfig,
   motionConfig,
 }) {
@@ -181,107 +132,73 @@ function applyLeadSphereState({
     return;
   }
 
-  const progress = THREE.MathUtils.clamp(leadPathPhase, 0, 1);
+  const progress = smootherstep(THREE.MathUtils.clamp(leadPathPhase, 0, 1));
   const point = curve.getPointAt(progress);
   const tangent = curve.getTangentAt(progress);
-  const stagingInfluence = 1 - smoothstep(progress / 0.22);
-  const idleOffset =
-    Math.sin(elapsed * sphereConfig.idleFloatSpeed + lane.driftPhase) *
-    sphereConfig.idleFloatAmplitude *
-    leadOpacity;
-  const driftX =
-    Math.sin(elapsed * 0.48 + lane.driftPhase) *
-    motionConfig.leadDriftX *
-    stagingInfluence;
-  const driftZ =
-    Math.cos(elapsed * 0.36 + lane.driftPhase * 1.4) *
-    motionConfig.leadDriftZ *
-    stagingInfluence;
-
-  entry.mesh.position.set(
-    point.x + driftX + tangent.x * motionConfig.leadTangentPull,
-    point.y + idleOffset,
-    point.z + driftZ,
-  );
-  entry.mesh.scale.setScalar(leadScale * (lane.scale ?? 1));
-  entry.material.opacity = leadOpacity;
-  entry.material.transparent = leadOpacity < 0.999;
-  entry.mesh.visible = leadOpacity > 0.002;
-}
-
-function applyTrailSphereState({
-  entry,
-  curve,
-  lane,
-  slot,
-  phase,
-  elapsed,
-  motionScale,
-  reducedMotion,
-  trailEndProgress,
-  fadeInEnd,
-  fadeOutStart,
-  motionConfig,
-}) {
-  if (!curve || !lane) {
-    entry.material.opacity = 0;
-    entry.mesh.visible = false;
-    return;
-  }
-
-  const easedPhase = smoothstep(phase);
-  const progress = THREE.MathUtils.lerp(0, trailEndProgress, easedPhase);
-  const point = curve.getPointAt(progress);
-  const tangent = curve.getTangentAt(progress);
-  const reveal = smoothstep(THREE.MathUtils.clamp(phase / Math.max(fadeInEnd, 0.001), 0, 1));
-  const fadeOut = 1 -
-    smoothstep(
+  const driftFade = 1 -
+    smootherstep(
       THREE.MathUtils.clamp(
-        (phase - fadeOutStart) / Math.max(1 - fadeOutStart, 0.001),
+        progress / Math.max(motionConfig.leadDriftFade ?? 0.64, 0.001),
         0,
         1,
       ),
     );
-  const opacityScale = reducedMotion ? 0.86 : 1;
-  const opacity = (slot.maxOpacity ?? 0.5) * opacityScale * reveal * fadeOut;
-
-  if (opacity <= 0.002) {
-    entry.material.opacity = 0;
-    entry.mesh.visible = false;
-    return;
-  }
-
-  const backfieldInfluence = 1 - easedPhase * 0.7;
+  const opacityEnvelope = THREE.MathUtils.lerp(
+    motionConfig.approachOpacityFloor ?? 0.62,
+    1,
+    smoothstep(
+      THREE.MathUtils.clamp(
+        progress / Math.max(motionConfig.approachRevealEnd ?? 0.32, 0.001),
+        0,
+        1,
+      ),
+    ),
+  );
+  const lanePhase = lane.driftPhase * Math.PI * 2;
+  const idleOffset =
+    Math.sin(elapsed * sphereConfig.idleFloatSpeed + lanePhase) *
+    sphereConfig.idleFloatAmplitude *
+    leadOpacity *
+    motionScale *
+    (0.4 + driftFade * 0.6);
   const driftX =
-    Math.sin(elapsed * 0.42 + (slot.phaseSeed ?? 0)) *
-    motionConfig.trailDriftX *
-    backfieldInfluence *
+    (
+      Math.sin(elapsed * (motionConfig.leadDriftSpeedX ?? 0.42) + lanePhase) *
+        (motionConfig.leadDriftX ?? 0.024) +
+      (lane.driftBias ?? 0)
+    ) *
+    driftFade *
+    motionScale;
+  const driftY =
+    (
+      Math.sin(elapsed * (motionConfig.leadDriftSpeedY ?? 0.34) + lanePhase * 1.36) *
+        (motionConfig.leadDriftY ?? 0.016) +
+      Math.sin(progress * Math.PI) * (lane.arcLift ?? 0)
+    ) *
+    driftFade *
     motionScale;
   const driftZ =
-    Math.cos(elapsed * 0.34 + lane.driftPhase * Math.PI * 2 + (slot.phaseSeed ?? 0)) *
-    motionConfig.trailDriftZ *
-    backfieldInfluence *
+    Math.cos(elapsed * (motionConfig.leadDriftSpeedZ ?? 0.28) + lanePhase * 1.18) *
+    (motionConfig.leadDriftZ ?? 0.015) *
+    driftFade *
     motionScale;
-  const bob =
-    Math.sin(elapsed * motionConfig.trailBobSpeed + (slot.phaseSeed ?? 0)) *
-    motionConfig.trailBob *
-    reveal *
-    motionScale;
-  const pulse =
+  const scalePulse =
     1 +
-    Math.sin(elapsed * 0.36 + (slot.phaseSeed ?? 0) * 2.2) *
-      motionConfig.trailScalePulse *
-      reveal;
+    Math.sin(elapsed * (motionConfig.leadScalePulseSpeed ?? 0.3) + lanePhase * 1.8) *
+      (motionConfig.leadScalePulse ?? 0.012) *
+      (0.2 + driftFade * 0.8) *
+      motionScale;
+  const tangentPull = (motionConfig.leadTangentPull ?? 0.014) * (0.45 + driftFade * 0.55);
 
   entry.mesh.position.set(
-    point.x + driftX + tangent.x * motionConfig.trailTangentPull,
-    point.y + bob,
-    point.z + driftZ + (slot.depthOffset ?? 0),
+    point.x + driftX + tangent.x * tangentPull,
+    point.y + idleOffset + driftY,
+    point.z + driftZ,
   );
-  entry.mesh.scale.setScalar((slot.scale ?? 0.9) * (lane.scale ?? 1) * pulse);
-  entry.material.opacity = opacity;
-  entry.material.transparent = true;
-  entry.mesh.visible = true;
+  entry.mesh.scale.setScalar(leadScale * (lane.scale ?? 1) * scalePulse);
+  entry.material.opacity = leadOpacity * opacityEnvelope;
+  entry.material.transparent = entry.material.opacity < 0.999;
+  entry.mesh.visible = entry.material.opacity > 0.002;
 }
 
 function smoothstep(value) {
@@ -289,11 +206,7 @@ function smoothstep(value) {
   return clamped * clamped * (3 - 2 * clamped);
 }
 
-function positiveModulo(value, divisor) {
-  return ((value % divisor) + divisor) % divisor;
-}
-
-function positiveModuloInt(value, divisor) {
-  const normalized = value % divisor;
-  return normalized < 0 ? normalized + divisor : normalized;
+function smootherstep(value) {
+  const clamped = THREE.MathUtils.clamp(value, 0, 1);
+  return clamped * clamped * clamped * (clamped * (clamped * 6 - 15) + 10);
 }

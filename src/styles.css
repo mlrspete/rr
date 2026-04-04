@@ -103,7 +103,8 @@ a {
   z-index: 0;
   overflow: hidden;
   opacity: 0;
-  transition: opacity 820ms var(--ease);
+  will-change: opacity;
+  transition: opacity 560ms var(--ease);
 }
 
 .hero-canvas[data-ready="true"] {
