@@ -3,7 +3,10 @@ import { gsap } from "gsap";
 import "./styles.css";
 import { createHeroScene } from "./scene/heroScene.js";
 import { curatedHeroAssetKeys, resolveHeroAssetKey } from "./scene/heroAssetRegistry.js";
-import { resolveHeroEnvironmentKey } from "./scene/heroEnvironmentRegistry.js";
+import {
+  hasExplicitHeroEnvironmentSelection,
+  resolveHeroEnvironmentKey,
+} from "./scene/heroEnvironmentRegistry.js";
 
 const prefersReducedMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
 
@@ -11,6 +14,7 @@ const heroCanvas = document.querySelector("[data-hero-canvas]");
 const heroStage = document.querySelector("[data-hero-stage]");
 const selectedHeroAssetKey = resolveHeroAssetKey(window.location.search);
 const selectedHeroEnvironmentKey = resolveHeroEnvironmentKey(window.location.search);
+const hasExplicitHeroEnvironment = hasExplicitHeroEnvironmentSelection(window.location.search);
 
 const heroScene = heroCanvas
   ? createHeroScene({
@@ -19,6 +23,7 @@ const heroScene = heroCanvas
       reducedMotion: prefersReducedMotion,
       assetKey: selectedHeroAssetKey,
       environmentKey: selectedHeroEnvironmentKey,
+      forceEnvironment: hasExplicitHeroEnvironment,
     })
   : null;
 

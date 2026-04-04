@@ -3,7 +3,11 @@ import { gsap } from "gsap";
 import { RoomEnvironment } from "three/examples/jsm/environments/RoomEnvironment.js";
 import { EXRLoader } from "three/examples/jsm/loaders/EXRLoader.js";
 
-import { getHeroResponsiveProfile, heroConfig } from "./config.js";
+import {
+  getHeroResponsiveProfile,
+  heroConfig,
+  resolveHeroMembraneConfig,
+} from "./config.js";
 import {
   clearHeroAssetCache,
   disposeHeroAssetInstance,
@@ -17,7 +21,7 @@ import {
 } from "./heroAssetRegistry.js";
 import {
   defaultHeroEnvironmentKey,
-  getHeroEnvironmentSpec,
+  resolveHeroEnvironmentSpecForViewport,
 } from "./heroEnvironmentRegistry.js";
 import { createHeroAssetMaterial, createHeroMaterials } from "./materials.js";
 import { AmbientParticlesController } from "./controllers/AmbientParticlesController.js";
@@ -30,20 +34,27 @@ export function createHeroScene({
   reducedMotion = false,
   assetKey = defaultHeroAssetKey,
   environmentKey = defaultHeroEnvironmentKey,
+  forceEnvironment = false,
 } = {}) {
   if (!container) {
     return null;
   }
 
   container.dataset.ready = "false";
+  let responsiveProfile = getHeroResponsiveProfile(
+    container.clientWidth || window.innerWidth,
+    reducedMotion,
+  );
+  const membraneConfig = resolveHeroMembraneConfig(responsiveProfile.viewportKey);
 
   let renderer;
 
   try {
     renderer = new THREE.WebGLRenderer({
-      antialias: true,
+      antialias: responsiveProfile.antialias,
       alpha: true,
       powerPreference: "high-performance",
+      precision: responsiveProfile.rendererPrecision,
     });
   } catch {
     return null;
@@ -82,11 +93,11 @@ export function createHeroScene({
   scene.add(introRig);
   scene.add(lights);
 
-  const materials = createHeroMaterials(heroConfig);
+  const materials = createHeroMaterials(heroConfig, { membraneConfig });
   const glowTexture = createGlowTexture();
   const membraneController = new MembraneController({
     config: {
-      ...heroConfig.membrane,
+      ...membraneConfig,
       palette: heroConfig.palette,
     },
     materials,
@@ -96,6 +107,7 @@ export function createHeroScene({
     config: heroConfig.sphereStream,
     sphereConfig: heroConfig.sphere,
     baseMaterial: materials.sphere,
+    detail: responsiveProfile.sphereDetail,
   });
   const ambientParticlesController = new AmbientParticlesController({
     config: heroConfig.ambientParticles,
@@ -115,25 +127,21 @@ export function createHeroScene({
   const assetInstances = new Map();
   const assetLoadPromises = new Map();
   const pathMarkers = {
-    sphereStart: 0.025,
-    sphereNear: 0.36,
-    sphereImpact: 0.5,
-    sphereHidden: 0.59,
-    objectHidden: 0.635,
-    objectReveal: 0.8,
-    objectDisplay: 0.88,
-    objectDrift: 0.948,
-    objectExit: 0.996,
+    sphereStart: 0.018,
+    sphereNear: 0.32,
+    sphereImpact: 0.47,
+    sphereHidden: 0.565,
+    objectHidden: 0.62,
+    objectReveal: 0.775,
+    objectDisplay: 0.865,
+    objectDrift: 0.935,
+    objectExit: 0.992,
   };
 
   let environmentTarget = null;
   let environmentFallbackScene = null;
   let currentAssetKey = getHeroAssetSpec(assetKey).key;
   let currentAssetIndex = curatedHeroAssetKeys.indexOf(currentAssetKey);
-  let responsiveProfile = getHeroResponsiveProfile(
-    container.clientWidth || window.innerWidth,
-    reducedMotion,
-  );
   let resizeObserver;
   let animationFrame = 0;
   let introTimeline = null;
@@ -145,7 +153,11 @@ export function createHeroScene({
   let resolveReadyPromise = () => {};
   let assetActivationToken = 0;
   let translationCurve = createTranslationCurve(responsiveProfile.chamber);
-  const activeEnvironmentSpec = getHeroEnvironmentSpec(environmentKey);
+  let activeEnvironmentSpec = resolveHeroEnvironmentSpecForViewport({
+    environmentKey,
+    viewportKey: responsiveProfile.viewportKey,
+    forceEnvironment,
+  });
   const readyPromise = new Promise((resolve) => {
     resolveReadyPromise = resolve;
   });
@@ -347,8 +359,8 @@ export function createHeroScene({
           hiddenSphereOpacity: 0.22,
           hiddenObjectOpacity: 0.02,
           hiddenObjectScale: 0.96,
-          impactScale: 1.02,
-          exitScale: 1.02,
+          impactScale: 1,
+          exitScale: 1.01,
         }
       : {
           approachActivation: 0.22,
@@ -366,8 +378,8 @@ export function createHeroScene({
           hiddenSphereOpacity: 0.05,
           hiddenObjectOpacity: 0.03,
           hiddenObjectScale: 0.92,
-          impactScale: 1.05,
-          exitScale: 1.04,
+          impactScale: 1.02,
+          exitScale: 1.02,
         };
     const sphereApproachEase = reducedMotion ? "none" : "sine.in";
     const sphereImpactEase = "none";
@@ -399,6 +411,8 @@ export function createHeroScene({
         cycleState,
         {
           sphereProgress: pathMarkers.sphereNear,
+          sphereOpacity: 1,
+          sphereScale: 1,
           membraneActivation: cycleMotion.approachActivation,
           membranePhase: cycleMotion.approachPhase,
           duration: timings.approachDuration,
@@ -422,7 +436,7 @@ export function createHeroScene({
         cycleState,
         {
           sphereProgress: pathMarkers.sphereHidden,
-          sphereScale: 0.86,
+          sphereScale: 0.78,
           sphereOpacity: cycleMotion.hiddenSphereOpacity,
           objectProgress: pathMarkers.objectHidden,
           objectOpacity: cycleMotion.hiddenObjectOpacity,
@@ -494,6 +508,7 @@ export function createHeroScene({
     const height = container.clientHeight || window.innerHeight;
 
     responsiveProfile = getHeroResponsiveProfile(width, reducedMotion);
+    sphereStreamController.setDetail(responsiveProfile.sphereDetail);
     renderer.setPixelRatio(getRendererPixelRatio(window.devicePixelRatio, responsiveProfile));
     renderer.setSize(width, height, false);
 
@@ -640,6 +655,10 @@ export function createHeroScene({
 
   async function preparePrimaryEnvironment() {
     try {
+      if (activeEnvironmentSpec.kind === "room") {
+        return createFallbackEnvironmentTexture({ pmremGenerator });
+      }
+
       return await loadEnvironmentTexture({
         pmremGenerator,
         exrLoader,
@@ -708,6 +727,11 @@ export function createHeroScene({
   async function initialize() {
     try {
       resize();
+      activeEnvironmentSpec = resolveHeroEnvironmentSpecForViewport({
+        environmentKey,
+        viewportKey: responsiveProfile.viewportKey,
+        forceEnvironment,
+      });
       rebuildCycleTimeline();
       initialized = true;
       await prepareFirstView();
@@ -808,7 +832,7 @@ export function createHeroScene({
       materials.sphere.dispose();
       materials.rustObject.dispose();
       materials.membrane.dispose();
-      materials.membraneEdge.dispose();
+      materials.membraneEdge?.dispose();
       materials.sweepBand.dispose();
 
       scene.traverse((object) => {
@@ -977,10 +1001,10 @@ function applyActiveAssetState(instance, cycleState, translationCurve, elapsed) 
 
 function createCycleState() {
   return {
-    sphereProgress: 0.025,
-    sphereScale: 1,
-    sphereOpacity: 1,
-    objectProgress: 0.61,
+    sphereProgress: 0.012,
+    sphereScale: 0.94,
+    sphereOpacity: 0,
+    objectProgress: 0.6,
     objectScale: 0.82,
     objectOpacity: 0,
     membraneActivation: 0.04,
@@ -990,10 +1014,10 @@ function createCycleState() {
 
 function getCycleResetState() {
   return {
-    sphereProgress: 0.025,
-    sphereScale: 1,
-    sphereOpacity: 1,
-    objectProgress: 0.61,
+    sphereProgress: 0.012,
+    sphereScale: 0.94,
+    sphereOpacity: 0,
+    objectProgress: 0.6,
     objectScale: 0.82,
     objectOpacity: 0,
     membraneActivation: 0.04,

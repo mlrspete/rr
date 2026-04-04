@@ -145,35 +145,24 @@ async function buildAssetTemplate(spec) {
     spec.normalizeRotation?.z ?? 0,
   );
 
-  root.updateMatrixWorld(true);
-
   assembly.traverse((child) => {
     if (!child.isMesh) {
       return;
     }
 
-    child.geometry.deleteAttribute("normal");
-    child.geometry.computeVertexNormals();
-    child.geometry.normalizeNormals();
-
-    child.geometry.computeBoundingBox();
-    child.geometry.computeBoundingSphere();
+    prepareAssetGeometry(child.geometry);
   });
 
   root.updateMatrixWorld(true);
 
   const initialBounds = new THREE.Box3().setFromObject(root);
   const initialCenter = initialBounds.getCenter(new THREE.Vector3());
+  const initialSize = initialBounds.getSize(new THREE.Vector3());
   normalized.position.sub(initialCenter);
-
-  root.updateMatrixWorld(true);
-
-  const centeredBounds = new THREE.Box3().setFromObject(root);
-  const centeredSize = centeredBounds.getSize(new THREE.Vector3());
   const referenceExtent = Math.max(
-    centeredSize.x,
-    centeredSize.y,
-    centeredSize.z,
+    initialSize.x,
+    initialSize.y,
+    initialSize.z,
     Number.EPSILON,
   );
   const uniformScale = (spec.targetExtent ?? 1.8) / referenceExtent;
@@ -185,6 +174,26 @@ async function buildAssetTemplate(spec) {
     root,
     bounds: extractBounds(new THREE.Box3().setFromObject(root)),
   };
+}
+
+function prepareAssetGeometry(geometry) {
+  const positions = geometry?.getAttribute?.("position");
+
+  if (!positions) {
+    return;
+  }
+
+  const normals = geometry.getAttribute("normal");
+
+  if (!normals || normals.count !== positions.count) {
+    geometry.computeVertexNormals();
+  }
+
+  geometry.normalizeNormals();
+
+  if (!geometry.boundingSphere) {
+    geometry.computeBoundingSphere();
+  }
 }
 
 function extractBounds(box) {

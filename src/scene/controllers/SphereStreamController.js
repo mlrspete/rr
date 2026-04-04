@@ -3,7 +3,7 @@ import * as THREE from "three";
 const DEFAULT_LANE_ORDER = ["mid", "upperMid", "mid", "low"];
 
 export class SphereStreamController {
-  constructor({ config, sphereConfig, baseMaterial }) {
+  constructor({ config, sphereConfig, baseMaterial, detail }) {
     this.config = config;
     this.sphereConfig = sphereConfig;
     this.group = new THREE.Group();
@@ -16,7 +16,11 @@ export class SphereStreamController {
       this.laneOrder.indexOf(config.initialLeadLane ?? this.laneOrder[0]),
     );
 
-    this.geometry = createSphereGeometry(sphereConfig);
+    this.detail = resolveSphereDetail(detail, sphereConfig);
+    this.geometry = createSphereGeometry({
+      ...sphereConfig,
+      ...this.detail,
+    });
     this.entry = createSphereEntry({
       geometry: this.geometry,
       material: baseMaterial.clone(),
@@ -36,6 +40,27 @@ export class SphereStreamController {
 
   advanceLeadLane() {
     this.leadLaneIndex = (this.leadLaneIndex + 1) % this.laneOrder.length;
+  }
+
+  setDetail(detail) {
+    const nextDetail = resolveSphereDetail(detail, this.sphereConfig);
+
+    if (
+      nextDetail.widthSegments === this.detail.widthSegments &&
+      nextDetail.heightSegments === this.detail.heightSegments
+    ) {
+      return;
+    }
+
+    const nextGeometry = createSphereGeometry({
+      ...this.sphereConfig,
+      ...nextDetail,
+    });
+
+    this.entry.mesh.geometry = nextGeometry;
+    this.geometry.dispose();
+    this.geometry = nextGeometry;
+    this.detail = nextDetail;
   }
 
   update({
@@ -92,6 +117,13 @@ function createSphereGeometry(config) {
   );
   geometry.computeVertexNormals();
   return geometry;
+}
+
+function resolveSphereDetail(detail, sphereConfig) {
+  return {
+    widthSegments: detail?.widthSegments ?? sphereConfig.widthSegments,
+    heightSegments: detail?.heightSegments ?? sphereConfig.heightSegments,
+  };
 }
 
 function createLaneCurve(baseSphere, laneConfig = {}) {
@@ -154,6 +186,14 @@ function applyLeadSphereState({
       ),
     ),
   );
+  const entryVisibility = smoothstep(
+    THREE.MathUtils.clamp(
+      (progress - (motionConfig.entryRevealStart ?? 0.08)) /
+        Math.max(motionConfig.entryRevealLength ?? 0.14, 0.001),
+      0,
+      1,
+    ),
+  );
   const lanePhase = lane.driftPhase * Math.PI * 2;
   const idleOffset =
     Math.sin(elapsed * sphereConfig.idleFloatSpeed + lanePhase) *
@@ -196,7 +236,7 @@ function applyLeadSphereState({
     point.z + driftZ,
   );
   entry.mesh.scale.setScalar(leadScale * (lane.scale ?? 1) * scalePulse);
-  entry.material.opacity = leadOpacity * opacityEnvelope;
+  entry.material.opacity = leadOpacity * opacityEnvelope * entryVisibility;
   entry.material.transparent = entry.material.opacity < 0.999;
   entry.mesh.visible = entry.material.opacity > 0.002;
 }

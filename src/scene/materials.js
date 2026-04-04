@@ -1,8 +1,10 @@
 import * as THREE from "three";
 
-export function createHeroMaterials(config) {
-  const membraneAppearance = config.membrane.appearance;
+export function createHeroMaterials(config, { membraneConfig } = {}) {
+  const membraneAppearance = membraneConfig?.appearance ?? config.membrane.appearance;
   const membraneActivation = config.membrane.activation;
+  const membraneSide =
+    membraneAppearance.side === "front" ? THREE.FrontSide : THREE.DoubleSide;
 
   return {
     sphere: new THREE.MeshPhysicalMaterial({
@@ -43,31 +45,11 @@ export function createHeroMaterials(config) {
         membraneAppearance.sheenColor ?? membraneAppearance.bodyColor,
       ),
       sheenRoughness: membraneAppearance.sheenRoughness ?? 1,
-      transparent: true,
+      transparent:
+        membraneAppearance.opacity < 0.999 || membraneAppearance.transmission > 0.001,
       opacity: membraneAppearance.opacity,
       envMapIntensity: membraneAppearance.envMapIntensity,
-      side: THREE.DoubleSide,
-    }),
-    membraneEdge: new THREE.MeshPhysicalMaterial({
-      color: membraneAppearance.rimColor,
-      emissive: membraneAppearance.rimEmissive,
-      emissiveIntensity: membraneAppearance.rimEmissiveIntensity,
-      metalness: membraneAppearance.rimMetalness,
-      roughness: membraneAppearance.rimRoughness,
-      clearcoat: membraneAppearance.rimClearcoat,
-      clearcoatRoughness: membraneAppearance.rimClearcoatRoughness,
-      specularIntensity: 1,
-      specularColor: new THREE.Color(
-        membraneAppearance.rimSpecularColor ?? config.palette.coolEdge,
-      ),
-      sheen: membraneAppearance.rimSheen ?? 0,
-      sheenColor: new THREE.Color(
-        membraneAppearance.rimSheenColor ?? membraneAppearance.rimColor,
-      ),
-      sheenRoughness: membraneAppearance.rimSheenRoughness ?? 1,
-      transparent: true,
-      opacity: membraneAppearance.rimOpacity,
-      envMapIntensity: membraneAppearance.rimEnvMapIntensity,
+      side: membraneSide,
     }),
     sweepBand: new THREE.MeshBasicMaterial({
       color: new THREE.Color(config.palette.cool).lerp(

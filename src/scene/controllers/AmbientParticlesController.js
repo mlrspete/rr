@@ -198,7 +198,9 @@ export class AmbientParticlesController {
     }
 
     positionAttribute.needsUpdate = true;
-    this.material.opacity = this.baseOpacity * THREE.MathUtils.lerp(0.68, 1, introProgress);
+    this.material.opacity =
+      this.baseOpacity *
+      THREE.MathUtils.lerp(this.config.introOpacityFloor ?? 0.68, 1, introProgress);
   }
 
   destroy() {

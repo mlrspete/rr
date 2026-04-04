@@ -2,13 +2,22 @@ import ferndaleStudioHdriUrl from "../../ferndale_studio_06_4k.exr?url";
 import hdri2Url from "../../hdri_2.exr?url";
 import hdri3Url from "../../hdri_3.exr?url";
 
-function createHeroEnvironmentSpec({ key, label, sourceUrl }) {
+function createHeroEnvironmentSpec({ key, label, sourceUrl = null, kind = "exr" }) {
   return {
     key,
     label,
     sourceUrl,
+    kind,
   };
 }
+
+const runtimeHeroEnvironmentRegistry = {
+  room: createHeroEnvironmentSpec({
+    key: "room",
+    label: "Studio Room",
+    kind: "room",
+  }),
+};
 
 export const heroEnvironmentRegistry = {
   ferndale: createHeroEnvironmentSpec({
@@ -46,4 +55,20 @@ export function resolveHeroEnvironmentKey(search = "") {
   return heroEnvironmentRegistry[requestedKey]
     ? requestedKey
     : defaultHeroEnvironmentKey;
+}
+
+export function hasExplicitHeroEnvironmentSelection(search = "") {
+  return new URLSearchParams(search).has("env");
+}
+
+export function resolveHeroEnvironmentSpecForViewport({
+  environmentKey = defaultHeroEnvironmentKey,
+  viewportKey = "desktop",
+  forceEnvironment = false,
+} = {}) {
+  if (!forceEnvironment && (viewportKey === "tablet" || viewportKey === "mobile")) {
+    return runtimeHeroEnvironmentRegistry.room;
+  }
+
+  return getHeroEnvironmentSpec(environmentKey);
 }

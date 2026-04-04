@@ -1,0 +1,29 @@
+﻿<!doctype html>
+<html>
+<body style='margin:0;background:black;'>
+<video id='v' muted playsinline crossorigin='anonymous' style='display:none'>
+  <source src='file:///C:\Users\Maria\Documents\GitHub\rr\new build screen rec.mp4' type='video/mp4'>
+</video>
+<canvas id='c'></canvas>
+<script>
+const params = new URLSearchParams(location.search);
+const t = Number(params.get('t') || '1');
+const v = document.getElementById('v');
+const c = document.getElementById('c');
+const ctx = c.getContext('2d');
+function draw() {
+  c.width = v.videoWidth;
+  c.height = v.videoHeight;
+  ctx.drawImage(v, 0, 0, c.width, c.height);
+  document.body.dataset.ready = 'true';
+}
+v.addEventListener('loadeddata', () => {
+  v.currentTime = t;
+});
+v.addEventListener('seeked', () => {
+  requestAnimationFrame(() => requestAnimationFrame(draw));
+});
+v.load();
+</script>
+</body>
+</html>
