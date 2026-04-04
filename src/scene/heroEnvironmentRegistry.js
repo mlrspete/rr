@@ -38,7 +38,7 @@ export const heroEnvironmentRegistry = {
 };
 
 export const curatedHeroEnvironmentKeys = ["ferndale", "hdri2", "hdri3"];
-export const defaultHeroEnvironmentKey = "hdri2";
+export const defaultHeroEnvironmentKey = "hdri3";
 
 export function getHeroEnvironmentSpec(key = defaultHeroEnvironmentKey) {
   return heroEnvironmentRegistry[key] ?? heroEnvironmentRegistry[defaultHeroEnvironmentKey];
