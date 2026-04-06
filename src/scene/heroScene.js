@@ -5,8 +5,12 @@ import { EXRLoader } from "three/examples/jsm/loaders/EXRLoader.js";
 
 import {
   getHeroResponsiveProfile,
+  resolveHeroBlobFieldConfig,
   heroConfig,
+  resolveHeroLightingConfig,
   resolveHeroMembraneConfig,
+  resolveHeroShaderWarmupMode,
+  resolveHeroSphereStreamConfig,
 } from "./config.js";
 import {
   clearHeroAssetCache,
@@ -21,10 +25,17 @@ import {
 } from "./heroAssetRegistry.js";
 import {
   defaultHeroEnvironmentKey,
+  heroRoomEnvironmentSpec,
+  loadHeroEnvironmentSourceUrl,
   resolveHeroEnvironmentSpecForViewport,
 } from "./heroEnvironmentRegistry.js";
-import { createHeroAssetMaterial, createHeroMaterials } from "./materials.js";
+import {
+  applyHeroMembraneMaterials,
+  createHeroAssetMaterial,
+  createHeroMaterials,
+} from "./materials.js";
 import { AmbientParticlesController } from "./controllers/AmbientParticlesController.js";
+import { BlobFieldController } from "./controllers/BlobFieldController.js";
 import { MembraneController } from "./controllers/MembraneController.js";
 import { SphereStreamController } from "./controllers/SphereStreamController.js";
 
@@ -35,6 +46,7 @@ export function createHeroScene({
   assetKey = defaultHeroAssetKey,
   environmentKey = defaultHeroEnvironmentKey,
   forceEnvironment = false,
+  runtimeHints = {},
 } = {}) {
   if (!container) {
     return null;
@@ -45,7 +57,19 @@ export function createHeroScene({
     container.clientWidth || window.innerWidth,
     reducedMotion,
   );
-  const membraneConfig = resolveHeroMembraneConfig(responsiveProfile.viewportKey);
+  let membraneConfig = resolveHeroMembraneConfig(responsiveProfile.viewportKey);
+  let lightingConfig = resolveHeroLightingConfig(
+    responsiveProfile.viewportKey,
+    reducedMotion,
+  );
+  let blobFieldConfig = resolveHeroBlobFieldConfig(
+    responsiveProfile.viewportKey,
+    reducedMotion,
+  );
+  let sphereStreamConfig = resolveHeroSphereStreamConfig(
+    responsiveProfile.viewportKey,
+    reducedMotion,
+  );
 
   let renderer;
 
@@ -65,6 +89,7 @@ export function createHeroScene({
   renderer.toneMappingExposure = heroConfig.renderer.exposure;
   renderer.setClearColor(heroConfig.palette.background, 0);
   renderer.domElement.className = "hero-webgl";
+  renderer.domElement.dataset.renderer = "webgl";
   container.replaceChildren(renderer.domElement);
 
   const scene = new THREE.Scene();
@@ -72,8 +97,8 @@ export function createHeroScene({
 
   const camera = new THREE.PerspectiveCamera(heroConfig.camera.desktop.fov, 1, 0.1, 50);
   const clock = new THREE.Clock();
-  const pmremGenerator = new THREE.PMREMGenerator(renderer);
-  const exrLoader = new EXRLoader();
+  let pmremGenerator = null;
+  let exrLoader = null;
 
   const introRig = new THREE.Group();
   const stageRig = new THREE.Group();
@@ -104,10 +129,14 @@ export function createHeroScene({
     glowTexture,
   });
   const sphereStreamController = new SphereStreamController({
-    config: heroConfig.sphereStream,
+    config: sphereStreamConfig,
     sphereConfig: heroConfig.sphere,
     baseMaterial: materials.sphere,
     detail: responsiveProfile.sphereDetail,
+  });
+  const blobFieldController = new BlobFieldController({
+    config: blobFieldConfig,
+    palette: heroConfig.palette,
   });
   const ambientParticlesController = new AmbientParticlesController({
     config: heroConfig.ambientParticles,
@@ -116,9 +145,10 @@ export function createHeroScene({
   });
 
   stageRig.add(ambientParticlesController.group);
+  chamberRig.add(blobFieldController.group);
   chamberRig.add(sphereStreamController.group);
   chamberRig.add(membraneController.group);
-  createLights(lights, heroConfig.lights);
+  const lightRig = createLights(lights, lightingConfig);
 
   const pointer = { x: 0, y: 0 };
   const targetPointer = { x: 0, y: 0 };
@@ -152,12 +182,15 @@ export function createHeroScene({
   let hasResolvedReady = false;
   let resolveReadyPromise = () => {};
   let assetActivationToken = 0;
+  let environmentLoadToken = 0;
   let translationCurve = createTranslationCurve(responsiveProfile.chamber);
   let activeEnvironmentSpec = resolveHeroEnvironmentSpecForViewport({
     environmentKey,
     viewportKey: responsiveProfile.viewportKey,
     forceEnvironment,
   });
+  const environmentTextureCache = new Map();
+  const environmentTexturePromises = new Map();
   const readyPromise = new Promise((resolve) => {
     resolveReadyPromise = resolve;
   });
@@ -210,20 +243,117 @@ export function createHeroScene({
   }
 
   function applyEnvironment(environmentTexture) {
-    const previousTarget = environmentTarget;
-    const previousFallbackScene = environmentFallbackScene;
-
     environmentTarget = environmentTexture?.target ?? null;
     environmentFallbackScene = environmentTexture?.fallbackScene ?? null;
     scene.environment = environmentTexture?.texture ?? null;
+  }
 
-    if (previousTarget && previousTarget !== environmentTarget) {
-      previousTarget.dispose();
+  function getResponsiveEnvironmentSpec(viewportKey = responsiveProfile.viewportKey) {
+    return resolveHeroEnvironmentSpecForViewport({
+      environmentKey,
+      viewportKey,
+      forceEnvironment,
+    });
+  }
+
+  function getPmremGenerator() {
+    if (!pmremGenerator) {
+      pmremGenerator = new THREE.PMREMGenerator(renderer);
     }
 
-    if (previousFallbackScene && previousFallbackScene !== environmentFallbackScene) {
-      previousFallbackScene.dispose();
+    return pmremGenerator;
+  }
+
+  function getExrLoader() {
+    if (!exrLoader) {
+      exrLoader = new EXRLoader();
     }
+
+    return exrLoader;
+  }
+
+  function getEnvironmentCacheKey(environmentSpec) {
+    return `${environmentSpec.kind}:${environmentSpec.key}`;
+  }
+
+  async function getOrCreateEnvironmentTexture(environmentSpec) {
+    const cacheKey = getEnvironmentCacheKey(environmentSpec);
+
+    if (environmentTextureCache.has(cacheKey)) {
+      return environmentTextureCache.get(cacheKey);
+    }
+
+    if (!environmentTexturePromises.has(cacheKey)) {
+      const promise = (async () => {
+        const texture =
+          environmentSpec.kind === "room"
+            ? createFallbackEnvironmentTexture({
+                pmremGenerator: getPmremGenerator(),
+              })
+            : await loadEnvironmentTexture({
+                pmremGenerator: getPmremGenerator(),
+                exrLoader: getExrLoader(),
+                environmentSpec,
+              });
+
+        environmentTextureCache.set(cacheKey, texture);
+        return texture;
+      })().finally(() => {
+        if (environmentTexturePromises.get(cacheKey) === promise) {
+          environmentTexturePromises.delete(cacheKey);
+        }
+      });
+
+      environmentTexturePromises.set(cacheKey, promise);
+    }
+
+    return environmentTexturePromises.get(cacheKey) ?? environmentTextureCache.get(cacheKey);
+  }
+
+  function disposeEnvironmentCache() {
+    for (const environmentTexture of environmentTextureCache.values()) {
+      environmentTexture.target?.dispose?.();
+      environmentTexture.fallbackScene?.dispose?.();
+    }
+
+    environmentTextureCache.clear();
+    environmentTexturePromises.clear();
+    environmentTarget = null;
+    environmentFallbackScene = null;
+    scene.environment = null;
+  }
+
+  function syncMembraneQualityProfile() {
+    membraneConfig = resolveHeroMembraneConfig(responsiveProfile.viewportKey);
+    applyHeroMembraneMaterials(materials, heroConfig, membraneConfig);
+    membraneController.setConfig({
+      ...membraneConfig,
+      palette: heroConfig.palette,
+    });
+  }
+
+  function syncSphereStreamQualityProfile() {
+    sphereStreamConfig = resolveHeroSphereStreamConfig(
+      responsiveProfile.viewportKey,
+      reducedMotion,
+    );
+    sphereStreamController.setConfig(sphereStreamConfig);
+  }
+
+  function syncLightingQualityProfile() {
+    lightingConfig = resolveHeroLightingConfig(
+      responsiveProfile.viewportKey,
+      reducedMotion,
+    );
+    lightRig.setConfig(lightingConfig);
+  }
+
+  function syncBlobFieldQualityProfile() {
+    blobFieldConfig = resolveHeroBlobFieldConfig(
+      responsiveProfile.viewportKey,
+      reducedMotion,
+    );
+    blobFieldController.setConfig(blobFieldConfig);
   }
 
   function syncActiveAssetVisibility() {
@@ -322,7 +452,9 @@ export function createHeroScene({
   function applyLayout() {
     membraneController.setLayout(responsiveProfile.chamber.membrane);
     sphereStreamController.setLayout(responsiveProfile.chamber);
+    blobFieldController.setLayout(responsiveProfile);
     ambientParticlesController.setLayout(responsiveProfile);
+    lightRig.setLayout(responsiveProfile);
     translationCurve = createTranslationCurve(responsiveProfile.chamber);
     resetCycleState(cycleState);
   }
@@ -506,8 +638,28 @@ export function createHeroScene({
   function resize() {
     const width = container.clientWidth || window.innerWidth;
     const height = container.clientHeight || window.innerHeight;
+    const previousViewportKey = responsiveProfile.viewportKey;
 
     responsiveProfile = getHeroResponsiveProfile(width, reducedMotion);
+
+    if (responsiveProfile.viewportKey !== previousViewportKey) {
+      syncMembraneQualityProfile();
+      syncLightingQualityProfile();
+      syncBlobFieldQualityProfile();
+      syncSphereStreamQualityProfile();
+
+      const nextEnvironmentSpec = getResponsiveEnvironmentSpec(responsiveProfile.viewportKey);
+
+      if (!initialized) {
+        activeEnvironmentSpec = nextEnvironmentSpec;
+      } else if (
+        nextEnvironmentSpec.key !== activeEnvironmentSpec?.key ||
+        nextEnvironmentSpec.kind !== activeEnvironmentSpec?.kind
+      ) {
+        void refreshEnvironment(nextEnvironmentSpec, { forceRender: true });
+      }
+    }
+
     sphereStreamController.setDetail(responsiveProfile.sphereDetail);
     renderer.setPixelRatio(getRendererPixelRatio(window.devicePixelRatio, responsiveProfile));
     renderer.setSize(width, height, false);
@@ -604,13 +756,30 @@ export function createHeroScene({
       heroConfig.camera.lookAt.y,
       heroConfig.camera.lookAt.z,
     );
+    lightRig.update({
+      elapsed,
+      pointer,
+      introProgress: introState.progress,
+      motionScale,
+      interactionStrength,
+      activation: cycleState.membraneActivation,
+      objectOpacity: cycleState.objectOpacity,
+    });
 
     sphereStreamController.update({
       elapsed,
+      introProgress: introState.progress,
       leadPathPhase: getLeadPathPhase(cycleState.sphereProgress, pathMarkers),
       leadOpacity: cycleState.sphereOpacity,
       leadScale: cycleState.sphereScale,
       motionScale,
+    });
+    blobFieldController.update({
+      elapsed,
+      pointer,
+      introProgress: introState.progress,
+      motionScale,
+      interactionStrength,
     });
     ambientParticlesController.update({
       elapsed,
@@ -653,20 +822,16 @@ export function createHeroScene({
     animationFrame = window.requestAnimationFrame(render);
   }
 
-  async function preparePrimaryEnvironment() {
+  async function preparePrimaryEnvironment(environmentSpec = activeEnvironmentSpec) {
     try {
-      if (activeEnvironmentSpec.kind === "room") {
-        return createFallbackEnvironmentTexture({ pmremGenerator });
+      return await getOrCreateEnvironmentTexture(environmentSpec);
+    } catch (error) {
+      if (environmentSpec.kind === "room") {
+        throw error;
       }
 
-      return await loadEnvironmentTexture({
-        pmremGenerator,
-        exrLoader,
-        environmentSpec: activeEnvironmentSpec,
-      });
-    } catch (error) {
       console.warn(
-        `REAL RUST hero could not load ${activeEnvironmentSpec.label}. Using the fallback environment.`,
+        `REAL RUST hero could not load ${environmentSpec.label}. Using the fallback environment.`,
         error,
       );
 
@@ -674,13 +839,43 @@ export function createHeroScene({
         return null;
       }
 
-      return createFallbackEnvironmentTexture({ pmremGenerator });
+      return getOrCreateEnvironmentTexture(heroRoomEnvironmentSpec);
+    }
+  }
+
+  async function refreshEnvironment(environmentSpec, { forceRender = false } = {}) {
+    const token = ++environmentLoadToken;
+    const environmentTexture = await preparePrimaryEnvironment(environmentSpec);
+
+    if (!environmentTexture) {
+      return;
+    }
+
+    if (isDestroyed || token !== environmentLoadToken) {
+      return;
+    }
+
+    activeEnvironmentSpec = environmentSpec;
+    applyEnvironment(environmentTexture);
+
+    if (forceRender && initialized) {
+      renderFrame(clock.running ? clock.getElapsedTime() : 0);
     }
   }
 
   async function precompileCriticalView() {
+    const shaderWarmupMode = resolveHeroShaderWarmupMode(
+      responsiveProfile.viewportKey,
+      reducedMotion,
+      runtimeHints,
+    );
+
+    if (shaderWarmupMode === "none") {
+      return;
+    }
+
     try {
-      if (typeof renderer.compileAsync === "function") {
+      if (shaderWarmupMode === "async" && typeof renderer.compileAsync === "function") {
         await renderer.compileAsync(scene, camera);
         return;
       }
@@ -706,8 +901,6 @@ export function createHeroScene({
     }
 
     if (isDestroyed) {
-      environmentTexture?.target?.dispose?.();
-      environmentTexture?.fallbackScene?.dispose?.();
       return;
     }
 
@@ -727,19 +920,15 @@ export function createHeroScene({
   async function initialize() {
     try {
       resize();
-      activeEnvironmentSpec = resolveHeroEnvironmentSpecForViewport({
-        environmentKey,
-        viewportKey: responsiveProfile.viewportKey,
-        forceEnvironment,
-      });
-      rebuildCycleTimeline();
-      initialized = true;
+      activeEnvironmentSpec = getResponsiveEnvironmentSpec();
       await prepareFirstView();
 
       if (isDestroyed) {
         return;
       }
 
+      initialized = true;
+      rebuildCycleTimeline();
       clock.start();
       startIntro();
       revealScene();
@@ -798,6 +987,9 @@ export function createHeroScene({
     getAssetKey() {
       return currentAssetKey;
     },
+    getRendererMode() {
+      return "webgl";
+    },
     destroy() {
       isDestroyed = true;
       resolveReady(null);
@@ -822,11 +1014,12 @@ export function createHeroScene({
 
       membraneController.destroy();
       sphereStreamController.destroy();
+      blobFieldController.destroy();
       ambientParticlesController.destroy();
+      lightRig.dispose?.();
       glowTexture.dispose();
-      environmentTarget?.dispose?.();
-      environmentFallbackScene?.dispose?.();
-      pmremGenerator.dispose();
+      disposeEnvironmentCache();
+      pmremGenerator?.dispose();
       clearHeroAssetCache();
 
       materials.sphere.dispose();
@@ -860,9 +1053,15 @@ function createFallbackEnvironmentTexture({ pmremGenerator }) {
 }
 
 async function loadEnvironmentTexture({ pmremGenerator, exrLoader, environmentSpec }) {
+  const sourceUrl = await loadHeroEnvironmentSourceUrl(environmentSpec);
+
+  if (!sourceUrl) {
+    throw new Error(`REAL RUST hero is missing a source URL for ${environmentSpec.label}.`);
+  }
+
   pmremGenerator.compileEquirectangularShader();
 
-  const exrTexture = await exrLoader.loadAsync(environmentSpec.sourceUrl);
+  const exrTexture = await exrLoader.loadAsync(sourceUrl);
   exrTexture.mapping = THREE.EquirectangularReflectionMapping;
 
   const target = pmremGenerator.fromEquirectangular(exrTexture);
@@ -876,53 +1075,311 @@ async function loadEnvironmentTexture({ pmremGenerator, exrLoader, environmentSp
 }
 
 function createLights(target, lightsConfig) {
-  const ambientLight = new THREE.AmbientLight(
-    lightsConfig.ambient.color,
-    lightsConfig.ambient.intensity,
-  );
-  target.add(ambientLight);
+  const lightRig = {
+    config: lightsConfig,
+    layout: null,
+    ambientLight: new THREE.AmbientLight(),
+    hemisphereLight: new THREE.HemisphereLight(),
+    keyLight: new THREE.DirectionalLight(),
+    fillLight: new THREE.DirectionalLight(),
+    rimLight: new THREE.DirectionalLight(),
+    chamberBackLight: new THREE.PointLight(),
+    membraneAccentLight: new THREE.PointLight(),
+    objectRevealLight: new THREE.PointLight(),
+    keyTarget: new THREE.Object3D(),
+    fillTarget: new THREE.Object3D(),
+    rimTarget: new THREE.Object3D(),
+    basePositions: {
+      chamberBack: new THREE.Vector3(),
+      membraneAccent: new THREE.Vector3(),
+      objectReveal: new THREE.Vector3(),
+    },
+    setConfig(nextConfig) {
+      this.config = nextConfig;
 
-  const hemisphereLight = new THREE.HemisphereLight(
-    lightsConfig.hemisphere.skyColor,
-    lightsConfig.hemisphere.groundColor,
-    lightsConfig.hemisphere.intensity,
-  );
-  target.add(hemisphereLight);
+      configureAmbientLight(this.ambientLight, nextConfig.ambient);
+      configureHemisphereLight(this.hemisphereLight, nextConfig.hemisphere);
+      configureDirectionalLight(this.keyLight, nextConfig.key);
+      configureDirectionalLight(this.fillLight, nextConfig.fill);
+      configureDirectionalLight(this.rimLight, nextConfig.rim);
+      configurePointLight(this.chamberBackLight, nextConfig.chamberBack);
+      configurePointLight(this.membraneAccentLight, nextConfig.membraneAccent);
+      configurePointLight(this.objectRevealLight, nextConfig.objectReveal);
 
-  const keyLight = new THREE.DirectionalLight(
-    lightsConfig.key.color,
-    lightsConfig.key.intensity,
-  );
-  keyLight.position.set(
-    lightsConfig.key.position.x,
-    lightsConfig.key.position.y,
-    lightsConfig.key.position.z,
-  );
-  target.add(keyLight);
+      this.keyLight.visible = this.keyLight.intensity > 0.001;
+      this.fillLight.visible = this.fillLight.intensity > 0.001;
+      this.rimLight.visible = this.rimLight.intensity > 0.001;
+      this.chamberBackLight.visible = this.chamberBackLight.intensity > 0.001;
+      this.membraneAccentLight.visible = this.membraneAccentLight.intensity > 0.001;
+      this.objectRevealLight.visible = this.objectRevealLight.intensity > 0.001;
 
-  const rimLight = new THREE.DirectionalLight(
-    lightsConfig.rim.color,
-    lightsConfig.rim.intensity,
-  );
-  rimLight.position.set(
-    lightsConfig.rim.position.x,
-    lightsConfig.rim.position.y,
-    lightsConfig.rim.position.z,
-  );
-  target.add(rimLight);
+      if (this.layout) {
+        this.setLayout(this.layout);
+      } else {
+        this.keyTarget.position.copy(resolveLightSpecPosition(null, nextConfig.key?.target));
+        this.fillTarget.position.copy(resolveLightSpecPosition(null, nextConfig.fill?.target));
+        this.rimTarget.position.copy(resolveLightSpecPosition(null, nextConfig.rim?.target));
+        this.basePositions.chamberBack.copy(
+          resolveLightSpecPosition(null, nextConfig.chamberBack?.position),
+        );
+        this.basePositions.membraneAccent.copy(
+          resolveLightSpecPosition(null, nextConfig.membraneAccent?.position),
+        );
+        this.basePositions.objectReveal.copy(
+          resolveLightSpecPosition(null, nextConfig.objectReveal?.position),
+        );
+        this.chamberBackLight.position.copy(this.basePositions.chamberBack);
+        this.membraneAccentLight.position.copy(this.basePositions.membraneAccent);
+        this.objectRevealLight.position.copy(this.basePositions.objectReveal);
+      }
+    },
+    setLayout(responsiveProfile) {
+      this.layout = responsiveProfile;
+      const chamber = responsiveProfile?.chamber ?? null;
 
-  const membraneAccentLight = new THREE.PointLight(
-    lightsConfig.membraneAccent.color,
-    lightsConfig.membraneAccent.intensity,
-    lightsConfig.membraneAccent.distance,
-    lightsConfig.membraneAccent.decay,
+      this.keyTarget.position.copy(resolveLightSpecPosition(chamber, this.config.key?.target));
+      this.fillTarget.position.copy(resolveLightSpecPosition(chamber, this.config.fill?.target));
+      this.rimTarget.position.copy(resolveLightSpecPosition(chamber, this.config.rim?.target));
+      this.basePositions.chamberBack.copy(
+        resolveLightSpecPosition(chamber, this.config.chamberBack?.position),
+      );
+      this.basePositions.membraneAccent.copy(
+        resolveLightSpecPosition(chamber, this.config.membraneAccent?.position),
+      );
+      this.basePositions.objectReveal.copy(
+        resolveLightSpecPosition(chamber, this.config.objectReveal?.position),
+      );
+
+      this.chamberBackLight.position.copy(this.basePositions.chamberBack);
+      this.membraneAccentLight.position.copy(this.basePositions.membraneAccent);
+      this.objectRevealLight.position.copy(this.basePositions.objectReveal);
+    },
+    update({
+      elapsed,
+      pointer,
+      introProgress = 1,
+      motionScale = 1,
+      interactionStrength = 1,
+      activation = 0,
+      objectOpacity = 0,
+    }) {
+      const motion = this.config.motion ?? {};
+      const activationStrength = THREE.MathUtils.clamp(activation, 0, 1.2);
+      const objectReveal = smoothstep(objectOpacity);
+      const introEnvelope = THREE.MathUtils.lerp(0.82, 1, introProgress);
+      const motionEnvelope = introProgress * (0.52 + motionScale * 0.48);
+      const pointerEnvelope = introProgress * interactionStrength;
+      const accentPulse =
+        Math.sin(elapsed * (motion.membraneAccentPulseSpeed ?? 0.26) + 0.68) * 0.5 + 0.5;
+      const chamberPulse =
+        Math.sin(elapsed * (motion.chamberBackPulseSpeed ?? 0.16) + 1.12) * 0.5 + 0.5;
+      const objectPulse =
+        Math.sin(elapsed * (motion.objectRevealPulseSpeed ?? 0.21) + 0.38) * 0.5 + 0.5;
+
+      this.keyLight.intensity =
+        this.config.key.intensity *
+        introEnvelope *
+        (1 + introProgress * (motion.keyIntroBoost ?? 0.08));
+      this.fillLight.intensity =
+        this.config.fill.intensity *
+        introEnvelope *
+        (0.92 + objectReveal * (motion.fillObjectBoost ?? 0.16));
+      this.rimLight.intensity =
+        this.config.rim.intensity *
+        introEnvelope *
+        (1 + activationStrength * (motion.rimActivationBoost ?? 0.1) + objectReveal * 0.08);
+      this.chamberBackLight.intensity =
+        this.config.chamberBack.intensity *
+        introEnvelope *
+        (0.92 + chamberPulse * 0.08) *
+        (1 + activationStrength * (motion.chamberBackActivationBoost ?? 0.18));
+      this.membraneAccentLight.intensity =
+        this.config.membraneAccent.intensity *
+        introEnvelope *
+        (0.84 + accentPulse * 0.16) *
+        (1 + activationStrength * (motion.membraneAccentActivationBoost ?? 0.42));
+      this.objectRevealLight.intensity =
+        this.config.objectReveal.intensity *
+        introEnvelope *
+        (0.24 + objectReveal * (motion.objectRevealOpacityBoost ?? 0.72)) *
+        (1 + activationStrength * (motion.objectRevealActivationBoost ?? 0.18) + objectPulse * 0.06);
+
+      this.membraneAccentLight.position.set(
+        this.basePositions.membraneAccent.x +
+          Math.sin(elapsed * (motion.membraneAccentSpeedX ?? 0.32) + 0.32) *
+            (motion.membraneAccentDriftX ?? 0.08) *
+            motionEnvelope +
+          pointer.x * (motion.membraneAccentPointerX ?? 0.12) * pointerEnvelope,
+        this.basePositions.membraneAccent.y +
+          Math.cos(elapsed * (motion.membraneAccentSpeedY ?? 0.22) + 0.88) *
+            (motion.membraneAccentDriftY ?? 0.05) *
+            motionEnvelope -
+          pointer.y * (motion.membraneAccentPointerY ?? 0.08) * pointerEnvelope,
+        this.basePositions.membraneAccent.z +
+          Math.sin(elapsed * (motion.membraneAccentSpeedX ?? 0.32) * 0.62 + 1.18) *
+            (motion.membraneAccentDriftZ ?? 0.04) *
+            motionEnvelope,
+      );
+      this.chamberBackLight.position.set(
+        this.basePositions.chamberBack.x +
+          Math.sin(elapsed * 0.14 + 0.84) *
+            (motion.chamberBackDriftX ?? 0.06) *
+            motionEnvelope,
+        this.basePositions.chamberBack.y +
+          Math.cos(elapsed * 0.11 + 0.54) *
+            (motion.chamberBackDriftY ?? 0.04) *
+            motionEnvelope,
+        this.basePositions.chamberBack.z,
+      );
+      this.objectRevealLight.position.set(
+        this.basePositions.objectReveal.x,
+        this.basePositions.objectReveal.y +
+          Math.sin(elapsed * (motion.objectRevealPulseSpeed ?? 0.21) + 0.42) *
+            (motion.objectRevealDriftY ?? 0.04) *
+            motionEnvelope,
+        this.basePositions.objectReveal.z,
+      );
+
+      this.keyLight.visible = this.keyLight.intensity > 0.001;
+      this.fillLight.visible = this.fillLight.intensity > 0.001;
+      this.rimLight.visible = this.rimLight.intensity > 0.001;
+      this.chamberBackLight.visible = this.chamberBackLight.intensity > 0.001;
+      this.membraneAccentLight.visible = this.membraneAccentLight.intensity > 0.001;
+      this.objectRevealLight.visible = this.objectRevealLight.intensity > 0.001;
+    },
+    dispose() {},
+  };
+
+  lightRig.keyLight.name = "heroKeyLight";
+  lightRig.fillLight.name = "heroFillLight";
+  lightRig.rimLight.name = "heroRimLight";
+  lightRig.chamberBackLight.name = "heroChamberBackLight";
+  lightRig.membraneAccentLight.name = "heroMembraneAccentLight";
+  lightRig.objectRevealLight.name = "heroObjectRevealLight";
+
+  lightRig.keyLight.target = lightRig.keyTarget;
+  lightRig.fillLight.target = lightRig.fillTarget;
+  lightRig.rimLight.target = lightRig.rimTarget;
+
+  target.add(lightRig.ambientLight);
+  target.add(lightRig.hemisphereLight);
+  target.add(lightRig.keyTarget);
+  target.add(lightRig.fillTarget);
+  target.add(lightRig.rimTarget);
+  target.add(lightRig.keyLight);
+  target.add(lightRig.fillLight);
+  target.add(lightRig.rimLight);
+  target.add(lightRig.chamberBackLight);
+  target.add(lightRig.membraneAccentLight);
+  target.add(lightRig.objectRevealLight);
+
+  lightRig.setConfig(lightsConfig);
+
+  return lightRig;
+}
+
+function configureAmbientLight(light, spec = {}) {
+  light.color.set(spec.color ?? "#ffffff");
+  light.intensity = spec.intensity ?? 0;
+}
+
+function configureHemisphereLight(light, spec = {}) {
+  light.color.set(spec.skyColor ?? "#ffffff");
+  light.groundColor.set(spec.groundColor ?? "#000000");
+  light.intensity = spec.intensity ?? 0;
+}
+
+function configureDirectionalLight(light, spec = {}) {
+  light.color.set(spec.color ?? "#ffffff");
+  light.intensity = spec.intensity ?? 0;
+  light.position.copy(resolveLightSpecPosition(null, spec.position));
+}
+
+function configurePointLight(light, spec = {}) {
+  light.color.set(spec.color ?? "#ffffff");
+  light.intensity = spec.intensity ?? 0;
+  light.distance = spec.distance ?? 0;
+  light.decay = spec.decay ?? 2;
+  light.position.copy(resolveLightSpecPosition(null, spec.position));
+}
+
+function resolveLightSpecPosition(chamberProfile, spec = {}) {
+  if (!spec) {
+    return new THREE.Vector3();
+  }
+
+  if (spec.anchor) {
+    return resolveLightAnchorPosition(chamberProfile, spec.anchor, spec.offset);
+  }
+
+  return new THREE.Vector3(spec.x ?? 0, spec.y ?? 0, spec.z ?? 0);
+}
+
+function resolveLightAnchorPosition(chamberProfile, anchor = "origin", offset = {}) {
+  const chamber = chamberProfile ?? {};
+  const membrane = chamber.membrane?.position ?? { x: 0, y: 0, z: 0 };
+  const sphere = chamber.sphere ?? {};
+  const object = chamber.object ?? {};
+
+  let baseX = 0;
+  let baseY = 0;
+  let baseZ = 0;
+
+  switch (anchor) {
+    case "membrane":
+      baseX = membrane.x ?? 0;
+      baseY = membrane.y ?? 0;
+      baseZ = membrane.z ?? 0;
+      break;
+    case "sphereStart":
+      baseX = sphere.startX ?? 0;
+      baseY = sphere.startY ?? 0;
+      baseZ = sphere.startZ ?? 0;
+      break;
+    case "sphereNear":
+      baseX = sphere.nearX ?? 0;
+      baseY = sphere.nearY ?? 0;
+      baseZ = sphere.nearZ ?? 0;
+      break;
+    case "sphereCross":
+      baseX = sphere.crossX ?? 0;
+      baseY = sphere.crossY ?? 0;
+      baseZ = sphere.crossZ ?? 0;
+      break;
+    case "sphereHidden":
+      baseX = sphere.hiddenX ?? 0;
+      baseY = sphere.hiddenY ?? 0;
+      baseZ = sphere.hiddenZ ?? 0;
+      break;
+    case "objectStart":
+      baseX = object.startX ?? 0;
+      baseY = object.startY ?? 0;
+      baseZ = object.startZ ?? 0;
+      break;
+    case "objectRest":
+      baseX = object.restX ?? 0;
+      baseY = object.restY ?? 0;
+      baseZ = object.restZ ?? 0;
+      break;
+    case "objectHold":
+      baseX = object.holdX ?? 0;
+      baseY = object.holdY ?? 0;
+      baseZ = object.holdZ ?? 0;
+      break;
+    case "objectExit":
+      baseX = object.exitX ?? 0;
+      baseY = object.exitY ?? 0;
+      baseZ = object.exitZ ?? 0;
+      break;
+    default:
+      break;
+  }
+
+  return new THREE.Vector3(
+    baseX + (offset?.x ?? 0),
+    baseY + (offset?.y ?? 0),
+    baseZ + (offset?.z ?? 0),
   );
-  membraneAccentLight.position.set(
-    lightsConfig.membraneAccent.position.x,
-    lightsConfig.membraneAccent.position.y,
-    lightsConfig.membraneAccent.position.z,
-  );
-  target.add(membraneAccentLight);
 }
 
 function createGlowTexture() {
@@ -994,8 +1451,30 @@ function applyActiveAssetState(instance, cycleState, translationCurve, elapsed) 
   instance.group.scale.setScalar(cycleState.objectScale);
 
   if (instance.material) {
+    const materialTone = heroConfig.rustObject.material;
+    const materialReveal = reveal;
+
     instance.material.opacity = cycleState.objectOpacity;
     instance.material.transparent = cycleState.objectOpacity < 0.999;
+    instance.material.roughness = THREE.MathUtils.clamp(
+      materialTone.roughness - materialReveal * 0.05,
+      0.08,
+      1,
+    );
+    instance.material.clearcoat = THREE.MathUtils.clamp(
+      materialTone.clearcoat + materialReveal * 0.08,
+      0,
+      1,
+    );
+    instance.material.clearcoatRoughness = THREE.MathUtils.clamp(
+      materialTone.clearcoatRoughness - materialReveal * 0.03,
+      0.04,
+      1,
+    );
+    instance.material.specularIntensity = materialTone.specularIntensity + materialReveal * 0.04;
+    instance.material.envMapIntensity = materialTone.envMapIntensity + materialReveal * 0.18;
+    instance.material.emissiveIntensity =
+      materialTone.emissiveIntensity * (0.92 - materialReveal * 0.18);
   }
 }
 

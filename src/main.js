@@ -1,8 +1,14 @@
 import { gsap } from "gsap";
 
 import "./styles.css";
+import { getHeroViewportKey, resolveHeroAssetPreloadConfig } from "./scene/config.js";
 import { createHeroScene } from "./scene/heroScene.js";
 import { curatedHeroAssetKeys, resolveHeroAssetKey } from "./scene/heroAssetRegistry.js";
+import {
+  defaultHeroRendererMode,
+  experimentalHeroRendererMode,
+  resolveHeroRendererMode,
+} from "./scene/heroRendererMode.js";
 import {
   hasExplicitHeroEnvironmentSelection,
   resolveHeroEnvironmentKey,
@@ -15,23 +21,37 @@ const heroStage = document.querySelector("[data-hero-stage]");
 const selectedHeroAssetKey = resolveHeroAssetKey(window.location.search);
 const selectedHeroEnvironmentKey = resolveHeroEnvironmentKey(window.location.search);
 const hasExplicitHeroEnvironment = hasExplicitHeroEnvironmentSelection(window.location.search);
+const selectedHeroRendererMode = resolveHeroRendererMode(window.location.search);
+const heroRuntimeHints = getHeroRuntimeHints();
+const heroViewportKey = getHeroViewportKey(
+  heroCanvas?.clientWidth ?? heroStage?.clientWidth ?? window.innerWidth,
+);
+const heroAssetPreloadConfig = resolveHeroAssetPreloadConfig(
+  heroViewportKey,
+  prefersReducedMotion,
+  heroRuntimeHints,
+);
+const heroSceneOptions = {
+  container: heroCanvas,
+  interactionTarget: heroStage ?? window,
+  reducedMotion: prefersReducedMotion,
+  assetKey: selectedHeroAssetKey,
+  environmentKey: selectedHeroEnvironmentKey,
+  forceEnvironment: hasExplicitHeroEnvironment,
+  runtimeHints: heroRuntimeHints,
+};
+let heroRendererBootState = {
+  requested: selectedHeroRendererMode,
+  active: defaultHeroRendererMode,
+  fallbackReason: "",
+};
 
-const heroScene = heroCanvas
-  ? createHeroScene({
-      container: heroCanvas,
-      interactionTarget: heroStage ?? window,
-      reducedMotion: prefersReducedMotion,
-      assetKey: selectedHeroAssetKey,
-      environmentKey: selectedHeroEnvironmentKey,
-      forceEnvironment: hasExplicitHeroEnvironment,
-    })
-  : null;
+applyHeroRendererBootState();
 
 const disposeContact = initializeContactShell();
 
 runIntroSequence();
-registerHeroControls();
-schedulePostReadyAssetPreload();
+void initializeHero();
 
 window.addEventListener("pagehide", destroyApp, { once: true });
 
@@ -44,6 +64,7 @@ if (import.meta.hot) {
 let hasDestroyed = false;
 let assetPreloadHandle = 0;
 let assetPreloadMode = "";
+let heroScene = null;
 
 function destroyApp() {
   if (hasDestroyed) {
@@ -73,16 +94,121 @@ function destroyApp() {
   heroScene?.destroy?.();
 }
 
+async function initializeHero() {
+  if (!heroCanvas) {
+    return;
+  }
+
+  const nextHeroScene = await createConfiguredHeroScene();
+
+  if (!nextHeroScene || hasDestroyed) {
+    nextHeroScene?.destroy?.();
+    return;
+  }
+
+  heroScene = nextHeroScene;
+  updateHeroRendererBootState({
+    active: heroScene.getRendererMode?.() ?? defaultHeroRendererMode,
+    fallbackReason:
+      selectedHeroRendererMode === experimentalHeroRendererMode &&
+      (heroScene.getRendererMode?.() ?? defaultHeroRendererMode) !== experimentalHeroRendererMode
+        ? heroRendererBootState.fallbackReason || "fallback"
+        : "",
+  });
+  registerHeroControls();
+  schedulePostReadyAssetPreload();
+}
+
+async function createConfiguredHeroScene() {
+  if (selectedHeroRendererMode === experimentalHeroRendererMode) {
+    const { scene, fallbackReason } = await tryCreateWebGPUHeroScene();
+
+    if (scene) {
+      updateHeroRendererBootState({
+        requested: experimentalHeroRendererMode,
+        active: experimentalHeroRendererMode,
+        fallbackReason: "",
+      });
+      return scene;
+    }
+
+    updateHeroRendererBootState({
+      requested: experimentalHeroRendererMode,
+      active: defaultHeroRendererMode,
+      fallbackReason,
+    });
+  }
+
+  updateHeroRendererBootState({
+    requested: selectedHeroRendererMode,
+    active: defaultHeroRendererMode,
+    fallbackReason: "",
+  });
+  return createHeroScene(heroSceneOptions);
+}
+
+async function tryCreateWebGPUHeroScene() {
+  if (!(await supportsWebGPU())) {
+    return {
+      scene: null,
+      fallbackReason: "unsupported",
+    };
+  }
+
+  try {
+    const module = await import("./scene/webgpu/createHeroSceneWebGPU.js");
+    const scene = await module.createHeroSceneWebGPU(heroSceneOptions);
+    return {
+      scene,
+      fallbackReason: scene ? "" : "init-failed",
+    };
+  } catch {
+    return {
+      scene: null,
+      fallbackReason: "init-failed",
+    };
+  }
+}
+
 function registerHeroControls() {
   if (!heroScene) {
     return;
   }
 
   window.realRustHero = {
+    requestedRenderer: selectedHeroRendererMode,
     assets: curatedHeroAssetKeys,
     setAsset: (key) => heroScene.setAsset(key),
     getCurrentAsset: () => heroScene.getAssetKey(),
+    getRequestedRenderer: () => heroRendererBootState.requested,
+    getFallbackReason: () => heroRendererBootState.fallbackReason,
+    getBootState: () => ({ ...heroRendererBootState }),
+    getRendererMode: () => heroScene.getRendererMode?.() ?? defaultHeroRendererMode,
   };
+}
+
+function updateHeroRendererBootState(nextState = {}) {
+  heroRendererBootState = {
+    ...heroRendererBootState,
+    ...nextState,
+  };
+  applyHeroRendererBootState();
+}
+
+function applyHeroRendererBootState() {
+  if (!heroCanvas) {
+    return;
+  }
+
+  heroCanvas.dataset.requestedRenderer = heroRendererBootState.requested;
+  heroCanvas.dataset.activeRenderer = heroRendererBootState.active;
+
+  if (heroRendererBootState.fallbackReason) {
+    heroCanvas.dataset.fallbackReason = heroRendererBootState.fallbackReason;
+    return;
+  }
+
+  delete heroCanvas.dataset.fallbackReason;
 }
 
 function schedulePostReadyAssetPreload() {
@@ -100,12 +226,14 @@ function schedulePostReadyAssetPreload() {
 }
 
 function scheduleAssetPreload() {
-  if (!heroScene) {
+  if (!heroScene || !heroAssetPreloadConfig.enabled) {
     return;
   }
 
   const activeAssetKey = heroScene.getAssetKey();
-  const remainingAssetKeys = curatedHeroAssetKeys.filter((key) => key !== activeAssetKey);
+  const remainingAssetKeys = curatedHeroAssetKeys
+    .filter((key) => key !== activeAssetKey)
+    .slice(0, heroAssetPreloadConfig.maxCount);
 
   if (!remainingAssetKeys.length) {
     return;
@@ -117,14 +245,52 @@ function scheduleAssetPreload() {
     heroScene.preloadAssets(remainingAssetKeys);
   };
 
-  if ("requestIdleCallback" in window) {
-    assetPreloadMode = "idle";
-    assetPreloadHandle = window.requestIdleCallback(preload, { timeout: 1800 });
+  const queueIdlePreload = () => {
+    if ("requestIdleCallback" in window) {
+      assetPreloadMode = "idle";
+      assetPreloadHandle = window.requestIdleCallback(preload, {
+        timeout: heroAssetPreloadConfig.idleTimeout,
+      });
+      return;
+    }
+
+    assetPreloadMode = "timeout";
+    assetPreloadHandle = window.setTimeout(preload, 0);
+  };
+
+  if ((heroAssetPreloadConfig.delayMs ?? 0) > 0) {
+    assetPreloadMode = "timeout";
+    assetPreloadHandle = window.setTimeout(() => {
+      assetPreloadHandle = 0;
+      assetPreloadMode = "";
+      queueIdlePreload();
+    }, heroAssetPreloadConfig.delayMs);
     return;
   }
 
-  assetPreloadMode = "timeout";
-  assetPreloadHandle = window.setTimeout(preload, 1200);
+  queueIdlePreload();
+}
+
+function getHeroRuntimeHints() {
+  const connection =
+    navigator.connection ?? navigator.mozConnection ?? navigator.webkitConnection ?? null;
+
+  return {
+    deviceMemory: navigator.deviceMemory ?? 0,
+    saveData: Boolean(connection?.saveData),
+  };
+}
+
+async function supportsWebGPU() {
+  if (!navigator.gpu) {
+    return false;
+  }
+
+  try {
+    return Boolean(await navigator.gpu.requestAdapter());
+  } catch {
+    return false;
+  }
 }
 
 function runIntroSequence() {
